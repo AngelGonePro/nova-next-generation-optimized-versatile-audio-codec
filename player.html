@@ -1,0 +1,2885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NOVA Player</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --panel2:#1c202a; --border:#2a2f3a; --text:#e6e8eb; --muted:#8b93a1; --accent:#6ea8ff; --hover:#232838; }
+  * { box-sizing: border-box; }
+  body { background:var(--bg); color:var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin:0; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  button { cursor:pointer; }
+
+  /* Top bar */
+  #topBar { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0; }
+  #topBar h1 { font-size:15px; margin:0; color:var(--accent); white-space:nowrap; }
+  #selectFolderBtn { background:var(--accent); color:#0a0d12; border:none; padding:7px 14px; border-radius:6px; font-weight:600; font-size:13px; }
+  #folderName { font-size:12.5px; color:var(--muted); }
+  #searchBox { margin-left:auto; padding:7px 12px; background:#0d0f13; border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; width:220px; }
+  #statusLine { font-size:12px; color:var(--muted); padding:4px 16px; background:var(--panel); border-bottom:1px solid var(--border); flex-shrink:0; }
+
+  /* Main layout */
+  #main { flex:1; display:flex; min-height:0; }
+  #sidebar { width:220px; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; }
+  #sidebar h2 { font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); padding:12px 14px 6px; margin:0; }
+  #newPlaylistBtn { margin:0 14px 10px; padding:6px 10px; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; font-size:12.5px; text-align:left; }
+  #playlistList { flex:1; overflow-y:auto; }
+  .playlist-item { padding:8px 14px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:6px; }
+  .playlist-item:hover { background:var(--hover); }
+  .playlist-item.active { background:var(--panel2); color:var(--accent); }
+  .pl-remove { margin-left:auto; opacity:0; color:var(--muted); font-size:11px; padding:2px 4px; }
+  .playlist-item:hover .pl-remove { opacity:1; }
+  .pl-remove:hover { color:#f87171; }
+
+  #center { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #viewHeader { padding:14px 20px 8px; display:flex; align-items:baseline; gap:10px; }
+  #viewTitle { font-size:18px; font-weight:600; }
+  #viewCount { font-size:12.5px; color:var(--muted); }
+  #trackList { flex:1; overflow-y:auto; padding:0 12px 12px; }
+
+  .track-row { display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:6px; cursor:pointer; }
+  .track-row:hover { background:var(--hover); }
+  .track-art { width:36px; height:36px; border-radius:4px; background-color:#0d0f13; background-size:cover; background-position:center; flex-shrink:0; }
+  .track-info { flex:1; min-width:0; }
+  .track-title { font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .track-sub { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .track-meta { font-size:11.5px; color:var(--muted); flex-shrink:0; width:90px; }
+  .track-dur { font-size:12px; color:var(--muted); flex-shrink:0; width:40px; text-align:right; }
+  .icon-btn { background:var(--panel2); border:1px solid var(--border); color:var(--muted); border-radius:5px; font-size:11px; padding:4px 7px; flex-shrink:0; }
+  .icon-btn:hover { color:var(--text); border-color:var(--accent); }
+  .empty-hint { color:var(--muted); font-size:13px; padding:24px; text-align:center; }
+
+  #queuePanel { width:260px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; }
+  #queuePanel h2 { font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); padding:12px 14px 6px; margin:0; }
+  #queueList { flex:1; overflow-y:auto; padding:0 8px; }
+  .queue-row { display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px; font-size:12.5px; }
+  .queue-row:hover { background:var(--hover); }
+  .queue-row.playing { color:var(--accent); }
+  .q-num { width:16px; color:var(--muted); font-size:11px; flex-shrink:0; }
+  .q-title { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+
+  /* Transport bar */
+  #transport { display:flex; align-items:center; gap:14px; padding:10px 20px; background:var(--panel); border-top:1px solid var(--border); flex-shrink:0; }
+  #npArt { width:44px; height:44px; border-radius:5px; background-color:#0d0f13; background-size:cover; background-position:center; flex-shrink:0; }
+  #npInfo { width:180px; flex-shrink:0; }
+  #npTitle { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #npArtist { font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #npStatus { font-size:10.5px; color:var(--accent); }
+  .transport-btn { background:none; border:none; color:var(--text); font-size:18px; padding:4px 8px; }
+  .transport-btn:hover { color:var(--accent); }
+  #playPauseBtn { font-size:20px; }
+  #playPauseBtn:disabled { opacity:0.3; cursor:default; }
+  #seekRow { flex:1; display:flex; align-items:center; gap:8px; }
+  #timeCurrent, #timeTotal { font-size:11px; color:var(--muted); width:34px; }
+  #timeTotal { text-align:left; }
+  #seekBar { flex:1; accent-color: var(--accent); }
+</style>
+</head>
+<body>
+
+  <div id="topBar">
+    <h1>NOVA Player</h1>
+    <button id="selectFolderBtn">Select Music Folder</button>
+    <span id="folderName"></span>
+    <input type="text" id="searchBox" placeholder="Search title, artist, album…">
+  </div>
+  <div id="statusLine">Select a folder containing .nova files to get started.</div>
+
+  <div id="main">
+    <div id="sidebar">
+      <h2>Playlists</h2>
+      <button id="newPlaylistBtn">+ New Playlist</button>
+      <div id="playlistList"></div>
+    </div>
+
+    <div id="center">
+      <div id="viewHeader">
+        <span id="viewTitle">Library</span>
+        <span id="viewCount"></span>
+      </div>
+      <div id="trackList"></div>
+    </div>
+
+    <div id="queuePanel">
+      <h2>Queue</h2>
+      <div id="queueList"></div>
+    </div>
+  </div>
+
+  <div id="transport">
+    <div id="npArt"></div>
+    <div id="npInfo">
+      <div id="npTitle">Nothing playing</div>
+      <div id="npArtist"></div>
+      <div id="npStatus"></div>
+    </div>
+    <button class="transport-btn" id="prevBtn" title="Previous">⏮</button>
+    <button class="transport-btn" id="playPauseBtn" title="Play/Pause" disabled>▶</button>
+    <button class="transport-btn" id="nextBtn" title="Next">⏭</button>
+    <div id="seekRow">
+      <span id="timeCurrent">0:00</span>
+      <input type="range" id="seekBar" min="0" max="1000" value="0">
+      <span id="timeTotal">0:00</span>
+    </div>
+  </div>
+
+<script>
+// NOVA lossless multichannel audio codec - prototype
+// Pure JS, no dependencies. Works in browser (plain <script>) and Node (for testing).
+//
+// Pipeline:
+//   WAV PCM -> pairwise reversible mid/side lifting across channels
+//            -> per-block fixed integer predictor (order 0-3, FLAC-style)
+//            -> residuals bucketed (bit-length symbol + raw extra bits)
+//            -> bucket symbols entropy-coded with static rANS
+//
+// Everything here is integer arithmetic, so encode->decode is bit-exact.
+
+(function (root) {
+  'use strict';
+
+  // ---------- WAV parsing / writing ----------
+
+  // ---------- Metadata extraction: RIFF LIST/INFO chunk + embedded ID3v2 chunk ----------
+  // Many WAV files (especially ones produced by ffmpeg from FLAC) carry tags either as a
+  // simple RIFF INFO list (INAM/IART/IPRD/...) or as a full embedded ID3v2 tag block
+  // (including cover art via the APIC frame). We parse both so metadata/artwork transfer
+  // automatically instead of requiring manual re-entry.
+
+  function decodeId3Text(bytes, encoding) {
+    // encoding: 0=Latin1, 1=UTF-16 with BOM, 2=UTF-16BE no BOM, 3=UTF-8
+    if (encoding === 0 || encoding === 3) {
+      // strip trailing null(s)
+      let end = bytes.length;
+      while (end > 0 && bytes[end - 1] === 0) end--;
+      const slice = bytes.subarray(0, end);
+      return encoding === 3 ? new TextDecoder('utf-8').decode(slice) : new TextDecoder('latin1').decode(slice);
+    } else {
+      // UTF-16 (with or without BOM)
+      let start = 0;
+      let little = true;
+      if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) { little = true; start = 2; }
+      else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) { little = false; start = 2; }
+      let end = bytes.length;
+      while (end - 1 > start && bytes[end - 1] === 0 && bytes[end - 2] === 0) end -= 2;
+      const codeUnits = [];
+      for (let i = start; i + 1 < end; i += 2) {
+        codeUnits.push(little ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]));
+      }
+      return String.fromCharCode.apply(null, codeUnits);
+    }
+  }
+
+  function findNullTerminator(bytes, start, encoding) {
+    if (encoding === 1 || encoding === 2) {
+      for (let i = start; i + 1 < bytes.length; i += 2) if (bytes[i] === 0 && bytes[i + 1] === 0) return i;
+      return bytes.length;
+    } else {
+      for (let i = start; i < bytes.length; i++) if (bytes[i] === 0) return i;
+      return bytes.length;
+    }
+  }
+
+  function parseId3v2(bytes) {
+    const tags = {};
+    let picture = null;
+    if (bytes.length < 10 || bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return { tags, picture };
+    const majorVersion = bytes[3];
+    const tagSize = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+    let pos = 10;
+    const end = Math.min(10 + tagSize, bytes.length);
+    const frameIdMap = { TIT2: 'title', TPE1: 'artist', TALB: 'album', TCON: 'genre', TRCK: 'track', TDRC: 'date', TYER: 'date', TPE2: 'albumArtist', TCOM: 'composer' };
+    while (pos + 10 <= end) {
+      const frameId = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
+      if (frameId === '\0\0\0\0') break;
+      let frameSize;
+      if (majorVersion >= 4) {
+        frameSize = ((bytes[pos + 4] & 0x7f) << 21) | ((bytes[pos + 5] & 0x7f) << 14) | ((bytes[pos + 6] & 0x7f) << 7) | (bytes[pos + 7] & 0x7f);
+      } else {
+        frameSize = (bytes[pos + 4] << 24) | (bytes[pos + 5] << 16) | (bytes[pos + 6] << 8) | bytes[pos + 7];
+      }
+      const frameStart = pos + 10;
+      const frameEnd = frameStart + frameSize;
+      if (frameSize <= 0 || frameEnd > end) break;
+      const frameBytes = bytes.subarray(frameStart, frameEnd);
+
+      if (frameIdMap[frameId] && frameBytes.length > 1) {
+        const encoding = frameBytes[0];
+        tags[frameIdMap[frameId]] = decodeId3Text(frameBytes.subarray(1), encoding);
+      } else if (frameId === 'APIC' && frameBytes.length > 4) {
+        const encoding = frameBytes[0];
+        let p = 1;
+        let mimeEnd = p;
+        while (mimeEnd < frameBytes.length && frameBytes[mimeEnd] !== 0) mimeEnd++;
+        const mime = new TextDecoder('latin1').decode(frameBytes.subarray(p, mimeEnd));
+        p = mimeEnd + 1;
+        p += 1; // picture type byte
+        const descEnd = findNullTerminator(frameBytes, p, encoding);
+        p = descEnd + (encoding === 1 || encoding === 2 ? 2 : 1);
+        const imgData = frameBytes.subarray(p);
+        picture = { mime: mime || 'image/jpeg', data: imgData.slice() };
+      }
+      pos = frameEnd;
+    }
+    return { tags, picture };
+  }
+
+  function parseRiffInfo(bytes) {
+    const tags = {};
+    const infoMap = { INAM: 'title', IART: 'artist', IPRD: 'album', ICRD: 'date', IGNR: 'genre', ICMT: 'comment', ITRK: 'track' };
+    let pos = 0;
+    while (pos + 8 <= bytes.length) {
+      const id = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
+      const size = bytes[pos + 4] | (bytes[pos + 5] << 8) | (bytes[pos + 6] << 16) | (bytes[pos + 7] << 24);
+      const dataStart = pos + 8;
+      if (size < 0 || dataStart + size > bytes.length) break;
+      if (infoMap[id]) {
+        let strEnd = dataStart;
+        while (strEnd < dataStart + size && bytes[strEnd] !== 0) strEnd++;
+        tags[infoMap[id]] = new TextDecoder('utf-8').decode(bytes.subarray(dataStart, strEnd));
+      }
+      pos = dataStart + size + (size % 2);
+    }
+    return tags;
+  }
+
+  function parseWav(buf) {
+    const dv = new DataView(buf);
+    const u8 = new Uint8Array(buf);
+    if (dv.getUint32(0, false) !== 0x52494646) throw new Error('Not a RIFF file');
+    if (dv.getUint32(8, false) !== 0x57415645) throw new Error('Not a WAVE file');
+
+    let pos = 12;
+    let fmt = null, dataOffset = -1, dataLen = 0;
+    let riffInfoTags = {}, id3Tags = {}, id3Picture = null;
+    while (pos + 8 <= buf.byteLength) {
+      const id = dv.getUint32(pos, false);
+      const size = dv.getUint32(pos + 4, true);
+      const body = pos + 8;
+      if (id === 0x666d7420) { // 'fmt '
+        fmt = {
+          audioFormat: dv.getUint16(body, true),
+          numChannels: dv.getUint16(body + 2, true),
+          sampleRate: dv.getUint32(body + 4, true),
+          bitsPerSample: dv.getUint16(body + 14, true),
+        };
+      } else if (id === 0x64617461) { // 'data'
+        dataOffset = body;
+        dataLen = size;
+      } else if (id === 0x4C495354) { // 'LIST'
+        const listType = dv.getUint32(body, false);
+        if (listType === 0x494E464F) { // 'INFO'
+          riffInfoTags = parseRiffInfo(u8.subarray(body + 4, body + size));
+        }
+      } else if (id === 0x69643320 || id === 0x49443320) { // 'id3 ' or 'ID3 '
+        const parsed = parseId3v2(u8.subarray(body, body + size));
+        id3Tags = parsed.tags;
+        id3Picture = parsed.picture;
+      }
+      pos = body + size + (size % 2);
+    }
+    if (!fmt || dataOffset < 0) throw new Error('Missing fmt or data chunk');
+    // ID3 tags take priority where both exist (usually richer/more reliable), RIFF INFO fills gaps
+    const tags = Object.assign({}, riffInfoTags, id3Tags);
+    const metadata = { tags, picture: id3Picture };
+    if (fmt.audioFormat !== 1 && fmt.audioFormat !== 0xFFFE) {
+      throw new Error('Only integer PCM WAV supported in this prototype (got format ' + fmt.audioFormat + ')');
+    }
+    const bytesPerSample = fmt.bitsPerSample / 8;
+    const numChannels = fmt.numChannels;
+    const frameBytes = bytesPerSample * numChannels;
+    const numFrames = Math.floor(dataLen / frameBytes);
+
+    const channels = [];
+    for (let c = 0; c < numChannels; c++) channels.push(new Int32Array(numFrames));
+
+    let off = dataOffset;
+    if (fmt.bitsPerSample === 16) {
+      for (let i = 0; i < numFrames; i++) {
+        for (let c = 0; c < numChannels; c++) {
+          channels[c][i] = dv.getInt16(off, true);
+          off += 2;
+        }
+      }
+    } else if (fmt.bitsPerSample === 24) {
+      for (let i = 0; i < numFrames; i++) {
+        for (let c = 0; c < numChannels; c++) {
+          let b0 = dv.getUint8(off), b1 = dv.getUint8(off + 1), b2 = dv.getUint8(off + 2);
+          let v = b0 | (b1 << 8) | (b2 << 16);
+          if (v & 0x800000) v -= 0x1000000; // sign extend
+          channels[c][i] = v;
+          off += 3;
+        }
+      }
+    } else if (fmt.bitsPerSample === 32) {
+      for (let i = 0; i < numFrames; i++) {
+        for (let c = 0; c < numChannels; c++) {
+          channels[c][i] = dv.getInt32(off, true);
+          off += 4;
+        }
+      }
+    } else {
+      throw new Error('Unsupported bit depth: ' + fmt.bitsPerSample);
+    }
+
+    return {
+      sampleRate: fmt.sampleRate,
+      numChannels,
+      bitsPerSample: fmt.bitsPerSample,
+      numFrames,
+      channels,
+      metadata, // { tags: {title,artist,album,...}, picture: {mime,data} | null } extracted from the WAV itself
+    };
+  }
+
+  function writeWav({ sampleRate, numChannels, bitsPerSample, numFrames, channels }) {
+    const bytesPerSample = bitsPerSample / 8;
+    const dataLen = numFrames * numChannels * bytesPerSample;
+    const buf = new ArrayBuffer(44 + dataLen);
+    const dv = new DataView(buf);
+    let p = 0;
+    function u32(v) { dv.setUint32(p, v, true); p += 4; }
+    function u16(v) { dv.setUint16(p, v, true); p += 2; }
+    function tag(s) { for (let i = 0; i < 4; i++) dv.setUint8(p++, s.charCodeAt(i)); }
+
+    tag('RIFF'); u32(36 + dataLen); tag('WAVE');
+    tag('fmt '); u32(16); u16(1); u16(numChannels); u32(sampleRate);
+    u32(sampleRate * numChannels * bytesPerSample); u16(numChannels * bytesPerSample); u16(bitsPerSample);
+    tag('data'); u32(dataLen);
+
+    let off = 44;
+    if (bitsPerSample === 16) {
+      for (let i = 0; i < numFrames; i++)
+        for (let c = 0; c < numChannels; c++) { dv.setInt16(off, channels[c][i], true); off += 2; }
+    } else if (bitsPerSample === 24) {
+      for (let i = 0; i < numFrames; i++)
+        for (let c = 0; c < numChannels; c++) {
+          let v = channels[c][i] & 0xFFFFFF;
+          dv.setUint8(off, v & 0xFF); dv.setUint8(off + 1, (v >> 8) & 0xFF); dv.setUint8(off + 2, (v >> 16) & 0xFF);
+          off += 3;
+        }
+    } else if (bitsPerSample === 32) {
+      for (let i = 0; i < numFrames; i++)
+        for (let c = 0; c < numChannels; c++) { dv.setInt32(off, channels[c][i], true); off += 4; }
+    }
+    return buf;
+  }
+
+  // ---------- Cross-channel reversible lifting: full hierarchical decorrelation ----------
+  // A single pairwise pass (0,1),(2,3),... only captures adjacent-pair correlation
+  // (e.g. front L/R). Real inter-channel redundancy in a 7.1 bed also spans further —
+  // front pair vs. rear pair, etc. This recursively re-applies the same reversible
+  // lifting step to the "mid" outputs of each level, building a full reduction tree.
+  //
+  // Critical fix: NOT every pair is actually correlated (e.g. Center vs LFE) — forcing
+  // a lift on an uncorrelated pair adds redundancy instead of removing it. Each lift is
+  // now adaptive: cheaply compare cost with vs. without, and only commit to the lift if
+  // it actually helps. One flag bit per pair, decided once for the whole file (negligible
+  // storage), returned alongside the transformed channels so decode can mirror the choice.
+  function liftPair(L, R) {
+    const len = L.length;
+    const mid = new Int32Array(len), side = new Int32Array(len);
+    for (let i = 0; i < len; i++) {
+      const s = L[i] - R[i];
+      const m = R[i] + (s >> 1);
+      side[i] = s;
+      mid[i] = m;
+    }
+    return { mid, side };
+  }
+  function unliftPair(mid, side) {
+    const len = mid.length;
+    const L = new Int32Array(len), R = new Int32Array(len);
+    for (let i = 0; i < len; i++) {
+      const r = mid[i] - (side[i] >> 1);
+      const l = r + side[i];
+      R[i] = r;
+      L[i] = l;
+    }
+    return { L, R };
+  }
+  function sumAbs(arr) {
+    let s = 0;
+    for (let i = 0; i < arr.length; i++) { const v = arr[i]; s += v < 0 ? -v : v; }
+    return s;
+  }
+  // Rice/entropy coding cost scales with log2(magnitude), not raw magnitude — two signals
+  // with identical sumAbs can have very different actual compressed size (a few large
+  // outliers vs. many mid-sized values compress very differently). Every adaptive decision
+  // (predictor choice, cross-channel lift, LMS mode) should be judged by this, not sumAbs.
+  function estimateBits(arr) {
+    let s = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i]; const av = v < 0 ? -v : v;
+      s += Math.log2(av + 1);
+    }
+    return s;
+  }
+
+  function crossChannelForward(channels) {
+    const n = channels.length;
+    if (n <= 1) return { result: channels.slice(), flags: [] };
+    const mids = [], sides = [], pairFlags = [];
+    for (let i = 0; i < n; i += 2) {
+      if (i + 1 < n) {
+        const L = channels[i], R = channels[i + 1];
+        const { mid, side } = liftPair(L, R);
+        const costLifted = estimateBits(mid) + estimateBits(side);
+        const costPlain = estimateBits(L) + estimateBits(R);
+        if (costLifted < costPlain) {
+          mids.push(mid); sides.push(side); pairFlags.push(1);
+        } else {
+          mids.push(L); sides.push(R); pairFlags.push(0); // lift didn't help — pass both through unchanged
+        }
+      } else {
+        mids.push(channels[i]); // odd one out passes through to the next level unchanged, no flag needed
+      }
+    }
+    const { result: reducedMids, flags: subFlags } = crossChannelForward(mids);
+    return { result: reducedMids.concat(sides), flags: pairFlags.concat(subFlags) };
+  }
+
+  function crossChannelInverse(transformed, flags) {
+    const n = transformed.length;
+    if (n <= 1) return transformed.slice();
+    const numMids = Math.ceil(n / 2);
+    const numSides = n - numMids;
+    const reducedMids = transformed.slice(0, numMids);
+    const sides = transformed.slice(numMids);
+    const pairFlags = flags.slice(0, numSides);
+    const subFlags = flags.slice(numSides);
+    const mids = crossChannelInverse(reducedMids, subFlags); // undo the deeper level first (mirror of forward's recursion)
+    const result = new Array(n);
+    let sideIdx = 0;
+    for (let i = 0; i < n; i += 2) {
+      if (i + 1 < n) {
+        const flag = pairFlags[sideIdx];
+        if (flag === 1) {
+          const { L, R } = unliftPair(mids[i / 2], sides[sideIdx]);
+          result[i] = L; result[i + 1] = R;
+        } else {
+          result[i] = mids[i / 2]; result[i + 1] = sides[sideIdx]; // was passed through unchanged
+        }
+        sideIdx++;
+      } else {
+        result[i] = mids[i / 2]; // the odd-one-out that passed through unchanged
+      }
+    }
+    return result;
+  }
+
+  // ---------- Predictors: FLAC-style fixed orders 0-3, plus real adaptive LPC ----------
+  // Fixed predictors are a cheap fallback. Adaptive LPC (coefficients fit per-block via
+  // Levinson-Durbin, quantized to integers for exact reversibility) is what actually gives
+  // codecs like WavPack/Monkey's Audio/FLAC's LPC mode most of their real compression —
+  // a fixed-shape predictor can't adapt to the block's actual spectral content, LPC can.
+
+  const BLOCK = 4096;
+  const LPC_ORDER = 8;
+  const LPC_PRECISION_BITS = 14;
+  const METHOD_LPC = 4;
+
+  function autocorrelate(x, start, end, order) {
+    const r = new Float64Array(order + 1);
+    for (let lag = 0; lag <= order; lag++) {
+      let sum = 0;
+      for (let i = start + lag; i < end; i++) sum += x[i] * x[i - lag];
+      r[lag] = sum;
+    }
+    return r;
+  }
+
+  function levinsonDurbin(r, order) {
+    let err = r[0];
+    let lpc = new Float64Array(order);
+    if (err <= 0) return { lpc, ok: false };
+    for (let i = 0; i < order; i++) {
+      let acc = r[i + 1];
+      for (let j = 0; j < i; j++) acc -= lpc[j] * r[i - j];
+      const k = acc / err;
+      const newLpc = lpc.slice();
+      newLpc[i] = k;
+      for (let j = 0; j < i; j++) newLpc[j] = lpc[j] - k * lpc[i - 1 - j];
+      lpc = newLpc;
+      err *= (1 - k * k);
+      if (!(err > 0)) return { lpc, ok: false }; // numerical breakdown (e.g. near-silent block)
+    }
+    return { lpc, ok: true };
+  }
+
+  function quantizeLPC(coeffs, precisionBits) {
+    let maxCoef = 0;
+    for (let i = 0; i < coeffs.length; i++) maxCoef = Math.max(maxCoef, Math.abs(coeffs[i]));
+    if (maxCoef <= 0) return { qcoeffs: new Int32Array(coeffs.length), shift: 0, ok: false };
+    let shift = precisionBits - 1 - Math.floor(Math.log2(maxCoef)) - 1;
+    shift = Math.max(0, Math.min(shift, 30));
+    const qcoeffs = new Int32Array(coeffs.length);
+    for (let i = 0; i < coeffs.length; i++) {
+      let q = Math.round(coeffs[i] * Math.pow(2, shift));
+      q = Math.max(-32768, Math.min(32767, q));
+      qcoeffs[i] = q;
+    }
+    return { qcoeffs, shift, ok: true };
+  }
+
+  function lpcPredict(x, i, qcoeffs, shift) {
+    let acc = 0;
+    for (let j = 0; j < qcoeffs.length; j++) acc += qcoeffs[j] * x[i - 1 - j];
+    return Math.floor(acc / Math.pow(2, shift));
+  }
+
+  function fitLPCForBlock(x, start, end) {
+    if (start < LPC_ORDER) return null;
+    const r = autocorrelate(x, start, end, LPC_ORDER);
+    if (r[0] <= 0) return null; // silent/near-silent block: LPC unstable and unnecessary
+    // tiny stabilizing bias, standard practice to avoid ill-conditioning
+    r[0] *= 1 + 1e-9;
+    const { lpc, ok } = levinsonDurbin(r, LPC_ORDER);
+    if (!ok) return null;
+    const { qcoeffs, shift, ok: qok } = quantizeLPC(lpc, LPC_PRECISION_BITS);
+    if (!qok) return null;
+    return { qcoeffs, shift };
+  }
+
+  // ---------- Backward-adaptive sign-sign LMS cascade (post-predictor refinement) ----------
+  // This is the mechanism that lets Monkey's Audio and similar codecs beat forward
+  // block-adaptive LPC: the filter continuously updates its weights sample-by-sample using
+  // only already-known (causal) history, so the decoder can replay the identical adaptation
+  // deterministically — no coefficients are ever transmitted. Applied here as a refinement
+  // pass on top of the existing block-LPC residual, to mop up structure/non-stationarity a
+  // fixed 4096-sample block boundary misses.
+
+  // Two cascaded stages, matching the real "cascaded adaptive filters" technique
+  // (e.g. MPEG-4 ALS's RLS+LMS cascade): stage 1 does the heavy lifting (larger order),
+  // stage 2 mops up what stage 1's fixed order/step-size couldn't track (smaller order,
+  // cheap to run). Modest total cost increase — stage 2's order is half of stage 1's.
+  const LMS_ORDER_1 = 16, LMS_SHIFT_1 = 9;
+  const LMS_ORDER_2 = 8, LMS_SHIFT_2 = 9;
+  const LMS_WEIGHT_CLAMP = 1 << 12; // keeps order*clamp*maxSample far below 2^53 (float64 exact-integer limit) even for 32-bit audio
+
+  function lmsForward(d, order, shift) {
+    const n = d.length;
+    const w = new Int32Array(order);
+    const hist = new Float64Array(order);
+    let pos = 0; // next write position (circular buffer)
+    const e = new Float64Array(n); // NOT Int32Array — avoids silent truncation if pred briefly overshoots int32 range
+    const div = Math.pow(2, shift);
+    for (let i = 0; i < n; i++) {
+      let pred = 0;
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order; // hist[idx] = sample from j steps ago
+        pred += w[j] * hist[idx];
+      }
+      pred = Math.floor(pred / div);
+      const input = d[i];
+      const err = input - pred;
+      e[i] = err;
+      const s = err > 0 ? 1 : (err < 0 ? -1 : 0);
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        const hs = hist[idx] > 0 ? 1 : (hist[idx] < 0 ? -1 : 0);
+        let nw = w[j] + s * hs;
+        if (nw > LMS_WEIGHT_CLAMP) nw = LMS_WEIGHT_CLAMP;
+        else if (nw < -LMS_WEIGHT_CLAMP) nw = -LMS_WEIGHT_CLAMP;
+        w[j] = nw;
+      }
+      hist[pos] = input;
+      pos = (pos + 1) % order;
+    }
+    return e;
+  }
+
+  function lmsInverse(e, order, shift) {
+    const n = e.length;
+    const w = new Int32Array(order);
+    const hist = new Float64Array(order);
+    let pos = 0;
+    const d = new Float64Array(n);
+    const div = Math.pow(2, shift);
+    for (let i = 0; i < n; i++) {
+      let pred = 0;
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        pred += w[j] * hist[idx];
+      }
+      pred = Math.floor(pred / div);
+      const err = e[i];
+      const input = err + pred;
+      d[i] = input;
+      const s = err > 0 ? 1 : (err < 0 ? -1 : 0);
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        const hs = hist[idx] > 0 ? 1 : (hist[idx] < 0 ? -1 : 0);
+        let nw = w[j] + s * hs;
+        if (nw > LMS_WEIGHT_CLAMP) nw = LMS_WEIGHT_CLAMP;
+        else if (nw < -LMS_WEIGHT_CLAMP) nw = -LMS_WEIGHT_CLAMP;
+        w[j] = nw;
+      }
+      hist[pos] = input;
+      pos = (pos + 1) % order;
+    }
+    return d;
+  }
+
+  // Same fix as cross-channel: a fixed cascade isn't guaranteed to help every channel
+  // (e.g. a near-silent LFE channel has no real structure left for an adaptive filter to
+  // find — running it anyway just adds filter noise). Pick per-channel, once, whichever of
+  // {no LMS, stage 1 only, full cascade} actually has the smallest residual magnitude.
+  function lmsCascadeForwardAdaptive(d) {
+    const stage1 = lmsForward(d, LMS_ORDER_1, LMS_SHIFT_1);
+    const stage2 = lmsForward(stage1, LMS_ORDER_2, LMS_SHIFT_2);
+    const costs = [estimateBits(d), estimateBits(stage1), estimateBits(stage2)];
+    let mode = 0, best = costs[0];
+    for (let m = 1; m <= 2; m++) if (costs[m] < best) { best = costs[m]; mode = m; }
+    const chosen = mode === 0 ? d : (mode === 1 ? stage1 : stage2);
+    return { refined: chosen, mode };
+  }
+  function lmsCascadeInverseAdaptive(e, mode) {
+    if (mode === 0) return e;
+    if (mode === 1) return lmsInverse(e, LMS_ORDER_1, LMS_SHIFT_1);
+    const stage1 = lmsInverse(e, LMS_ORDER_2, LMS_SHIFT_2);
+    return lmsInverse(stage1, LMS_ORDER_1, LMS_SHIFT_1);
+  }
+
+  function predictChannelForward(x) {
+    const len = x.length;
+    const residuals = new Int32Array(len);
+    const orders = [];
+    const lpcParams = []; // { shift, qcoeffs } per block that used LPC, in block order
+
+    for (let start = 0; start < len; start += BLOCK) {
+      const end = Math.min(start + BLOCK, len);
+      let bestMethod = 0, bestCost = Infinity;
+
+      for (let order = 0; order <= 3; order++) {
+        if (start < order) continue;
+        let cost = 0;
+        for (let i = start; i < end; i++) { const r = residualAt(x, i, order); const av = r < 0 ? -r : r; cost += Math.log2(av + 1); }
+        if (cost < bestCost) { bestCost = cost; bestMethod = order; }
+      }
+      if (start < 3) bestMethod = 0;
+
+      let lpcCandidate = null;
+      if (start >= LPC_ORDER) {
+        lpcCandidate = fitLPCForBlock(x, start, end);
+        if (lpcCandidate) {
+          let cost = 0;
+          for (let i = start; i < end; i++) {
+            const pred = lpcPredict(x, i, lpcCandidate.qcoeffs, lpcCandidate.shift);
+            const r = x[i] - pred;
+            const av = r < 0 ? -r : r;
+            cost += Math.log2(av + 1);
+          }
+          if (cost < bestCost) { bestCost = cost; bestMethod = METHOD_LPC; }
+        }
+      }
+
+      orders.push(bestMethod);
+      if (bestMethod === METHOD_LPC) {
+        lpcParams.push(lpcCandidate);
+        for (let i = start; i < end; i++) residuals[i] = x[i] - lpcPredict(x, i, lpcCandidate.qcoeffs, lpcCandidate.shift);
+      } else {
+        for (let i = start; i < end; i++) residuals[i] = start < bestMethod ? x[i] : residualAt(x, i, bestMethod);
+      }
+    }
+    return { residuals, orders, lpcParams };
+  }
+
+  function residualAt(x, i, order) {
+    switch (order) {
+      case 0: return x[i];
+      case 1: return x[i] - x[i - 1];
+      case 2: return x[i] - (2 * x[i - 1] - x[i - 2]);
+      case 3: return x[i] - (3 * x[i - 1] - 3 * x[i - 2] + x[i - 3]);
+    }
+  }
+
+  function predictChannelInverse(residuals, orders, lpcParams, len) {
+    const x = new Int32Array(len);
+    let blockIdx = 0, lpcIdx = 0;
+    for (let start = 0; start < len; start += BLOCK) {
+      const end = Math.min(start + BLOCK, len);
+      const method = orders[blockIdx++];
+      if (method === METHOD_LPC) {
+        const { qcoeffs, shift } = lpcParams[lpcIdx++];
+        for (let i = start; i < end; i++) x[i] = residuals[i] + lpcPredict(x, i, qcoeffs, shift);
+        continue;
+      }
+      const order = method;
+      for (let i = start; i < end; i++) {
+        if (start < order) { x[i] = residuals[i]; continue; }
+        let pred;
+        switch (order) {
+          case 0: pred = 0; break;
+          case 1: pred = x[i - 1]; break;
+          case 2: pred = 2 * x[i - 1] - x[i - 2]; break;
+          case 3: pred = 3 * x[i - 1] - 3 * x[i - 2] + x[i - 3]; break;
+        }
+        x[i] = residuals[i] + pred;
+      }
+    }
+    return x;
+  }
+
+  // ---------- Bit writer / reader ----------
+
+  function BitWriter() {
+    this.bytes = [];
+    this.cur = 0;
+    this.nbits = 0;
+  }
+  BitWriter.prototype.writeBits = function (value, n) {
+    // writes n bits (0<=n<=24 per call is safe), MSB-first within the stream
+    for (let i = n - 1; i >= 0; i--) {
+      this.cur = (this.cur << 1) | ((value >>> i) & 1);
+      this.nbits++;
+      if (this.nbits === 8) { this.bytes.push(this.cur & 0xFF); this.cur = 0; this.nbits = 0; }
+    }
+  };
+  BitWriter.prototype.finish = function () {
+    if (this.nbits > 0) { this.cur = this.cur << (8 - this.nbits); this.bytes.push(this.cur & 0xFF); this.cur = 0; this.nbits = 0; }
+    return new Uint8Array(this.bytes);
+  };
+
+  function BitReader(bytes) {
+    this.bytes = bytes;
+    this.pos = 0;
+    this.bitpos = 0;
+  }
+  BitReader.prototype.readBits = function (n) {
+    let v = 0;
+    for (let i = 0; i < n; i++) {
+      const byte = this.bytes[this.pos];
+      const bit = (byte >> (7 - this.bitpos)) & 1;
+      v = (v << 1) | bit;
+      this.bitpos++;
+      if (this.bitpos === 8) { this.bitpos = 0; this.pos++; }
+    }
+    return v >>> 0;
+  };
+
+  // ---------- Rice-parameter residual splitting + rANS on the quotient ----------
+  // Previous approach (bit-length bucket + raw remainder) wasted most of its size on
+  // "raw" bits that weren't actually uniformly distributed. This instead picks a
+  // per-block Rice parameter k (same idea FLAC uses) so the k low bits genuinely are
+  // close to uniform, and only THOSE are stored raw — while the quotient (which FLAC
+  // would unary-code) is entropy-coded with rANS instead, using its real measured
+  // distribution rather than assuming a fixed geometric shape.
+
+  const QUOT_MAX = 40; // quotient values >= this become an escape (rare outliers)
+  const ALPHABET_SIZE = QUOT_MAX + 2; // 0..QUOT_MAX-1 normal, QUOT_MAX = escape symbol
+
+  function zigzagArray(residuals) {
+    const n = residuals.length;
+    const u = new Float64Array(n); // residual can exceed 32-bit after zigzag in pathological cases; keep headroom
+    for (let i = 0; i < n; i++) { const r = residuals[i]; u[i] = r >= 0 ? r * 2 : (-r * 2 - 1); }
+    return u;
+  }
+
+  function costForK(uSlice, k) {
+    let cost = 0;
+    const div = Math.pow(2, k);
+    for (let i = 0; i < uSlice.length; i++) {
+      const q = Math.floor(uSlice[i] / div);
+      cost += Math.min(q, QUOT_MAX) + 1 + k;
+    }
+    return cost;
+  }
+
+  function chooseRiceK(uSlice) {
+    if (uSlice.length === 0) return 0;
+    let sum = 0;
+    for (let i = 0; i < uSlice.length; i++) sum += uSlice[i];
+    const mean = sum / uSlice.length;
+    if (mean < 1) return 0;
+    let k0 = Math.max(0, Math.round(Math.log2(mean)));
+    let bestK = k0, bestCost = costForK(uSlice, k0);
+    for (const kk of [k0 - 1, k0 + 1, k0 - 2, k0 + 2]) {
+      if (kk < 0) continue;
+      const c = costForK(uSlice, kk);
+      if (c < bestCost) { bestCost = c; bestK = kk; }
+    }
+    return bestK;
+  }
+
+  function bitLengthOf(u) {
+    if (u <= 0) return 0;
+    let b = 0, t = u;
+    while (t >= 1) { t = Math.floor(t / 2); b++; }
+    return b;
+  }
+  function writeEscape(bw, u) {
+    const bitLen = bitLengthOf(u);
+    bw.writeBits(bitLen, 6); // up to 63 bits representable — plenty of headroom
+    if (bitLen > 16) { bw.writeBits(Math.floor(u / 65536), bitLen - 16); bw.writeBits(u & 0xFFFF, 16); }
+    else if (bitLen > 0) bw.writeBits(u, bitLen);
+  }
+  function readEscape(br) {
+    const bitLen = br.readBits(6);
+    if (bitLen === 0) return 0;
+    if (bitLen > 16) { const hi = br.readBits(bitLen - 16), lo = br.readBits(16); return hi * 65536 + lo; }
+    return br.readBits(bitLen);
+  }
+
+  function riceSplitChannel(residuals, blockStarts) {
+    const n = residuals.length;
+    const u = zigzagArray(residuals);
+    const numBlocks = blockStarts.length;
+    const riceKs = new Uint8Array(numBlocks);
+    const symbols = new Uint8Array(n);
+    const bw = new BitWriter();
+
+    for (let b = 0; b < numBlocks; b++) {
+      const start = blockStarts[b];
+      const end = b + 1 < numBlocks ? blockStarts[b + 1] : n;
+      const k = chooseRiceK(u.subarray(start, end));
+      riceKs[b] = k;
+      const div = Math.pow(2, k);
+      for (let i = start; i < end; i++) {
+        const q = Math.floor(u[i] / div);
+        if (q >= QUOT_MAX) {
+          symbols[i] = QUOT_MAX;
+          writeEscape(bw, u[i]);
+        } else {
+          symbols[i] = q;
+          if (k > 0) {
+            const rem = u[i] - q * div;
+            if (k > 24) { bw.writeBits(Math.floor(rem / 65536), k - 16); bw.writeBits(rem & 0xFFFF, 16); }
+            else bw.writeBits(rem, k);
+          }
+        }
+      }
+    }
+    return { symbols, riceKs, extraBytes: bw.finish() };
+  }
+
+  function riceJoinChannel(symbols, riceKs, blockStarts, extraBytes, n) {
+    const br = new BitReader(extraBytes);
+    const residuals = new Float64Array(n); // not Int32Array — LMS-domain residuals can exceed 32-bit range in extreme cases
+    const numBlocks = blockStarts.length;
+    for (let b = 0; b < numBlocks; b++) {
+      const start = blockStarts[b];
+      const end = b + 1 < numBlocks ? blockStarts[b + 1] : n;
+      const k = riceKs[b];
+      const div = Math.pow(2, k);
+      for (let i = start; i < end; i++) {
+        const sym = symbols[i];
+        let u;
+        if (sym === QUOT_MAX) {
+          u = readEscape(br);
+        } else {
+          let rem = 0;
+          if (k > 0) {
+            if (k > 24) { const hi = br.readBits(k - 16), lo = br.readBits(16); rem = hi * 65536 + lo; }
+            else rem = br.readBits(k);
+          }
+          u = sym * div + rem;
+        }
+        residuals[i] = (u % 2 === 1) ? -((u + 1) / 2) : (u / 2);
+      }
+    }
+    return residuals;
+  }
+
+  function blockStartsFor(n) {
+    const starts = [];
+    for (let s = 0; s < n; s += BLOCK) starts.push(s);
+    if (starts.length === 0) starts.push(0);
+    return starts;
+  }
+
+  // ---------- Static rANS (byte-alphabet, 32-bit state) ----------
+  // Encodes a stream of small-alphabet symbols (bucket indices, 0..~32) using
+  // their measured frequencies instead of assuming a fixed geometric shape (Rice).
+
+  const RANS_L = 1 << 16; // lower bound of normalization interval
+  const PROB_BITS = 14;
+  const PROB_SCALE = 1 << PROB_BITS;
+
+  function buildFreqTable(symbols, alphabetSize) {
+    const freq = new Uint32Array(alphabetSize);
+    for (let i = 0; i < symbols.length; i++) freq[symbols[i]]++;
+    // normalize to sum exactly PROB_SCALE, every used symbol gets >=1
+    const total = symbols.length || 1;
+    const norm = new Uint32Array(alphabetSize);
+    let sum = 0;
+    for (let s = 0; s < alphabetSize; s++) {
+      if (freq[s] === 0) { norm[s] = 0; continue; }
+      let f = Math.round(freq[s] * PROB_SCALE / total);
+      if (f === 0) f = 1;
+      norm[s] = f;
+      sum += f;
+    }
+    // fix rounding so sum === PROB_SCALE exactly
+    let diff = PROB_SCALE - sum;
+    // adjust the largest-frequency symbol(s) to absorb the difference
+    while (diff !== 0) {
+      let idx = -1, best = -1;
+      for (let s = 0; s < alphabetSize; s++) if (norm[s] > best) { best = norm[s]; idx = s; }
+      if (diff > 0) { norm[idx]++; diff--; }
+      else { if (norm[idx] > 1) { norm[idx]--; diff++; } else break; }
+    }
+    const cum = new Uint32Array(alphabetSize + 1);
+    for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + norm[s];
+    return { freq: norm, cum };
+  }
+
+  function ransEncode(symbols, table) {
+    const { freq, cum } = table;
+    let x = RANS_L;
+    const outBytes = [];
+    // encode in reverse; rANS is a stack machine
+    for (let i = symbols.length - 1; i >= 0; i--) {
+      const s = symbols[i];
+      const f = freq[s], c = cum[s];
+      const xMax = ((RANS_L >>> PROB_BITS) << 8) * f; // renorm threshold (byte-wise renorm)
+      while (x >= xMax) { outBytes.push(x & 0xFF); x = Math.floor(x / 256); }
+      x = Math.floor(x / f) * PROB_SCALE + (x % f) + c;
+    }
+    outBytes.push(x & 0xFF, (x >>> 8) & 0xFF, (x >>> 16) & 0xFF, (x >>> 24) & 0xFF);
+    outBytes.reverse();
+    return new Uint8Array(outBytes);
+  }
+
+  function ransDecode(bytes, table, count) {
+    const { freq, cum } = table;
+    let pos = 0;
+    function nextByte() { return bytes[pos++]; }
+    let x = nextByte() << 24 | nextByte() << 16 | nextByte() << 8 | nextByte();
+    x = x >>> 0;
+    // build symbol lookup by cumulative freq
+    const alphabetSize = freq.length;
+    const slot2sym = new Uint8Array(PROB_SCALE);
+    for (let s = 0; s < alphabetSize; s++) for (let j = cum[s]; j < cum[s] + freq[s]; j++) slot2sym[j] = s;
+
+    const out = new Uint8Array(count);
+    for (let i = 0; i < count; i++) {
+      const slot = x & (PROB_SCALE - 1);
+      const s = slot2sym[slot];
+      const f = freq[s], c = cum[s];
+      x = f * (x >>> PROB_BITS) + slot - c;
+      while (x < RANS_L) { x = (x * 256) + nextByte(); }
+      out[i] = s;
+    }
+    return out;
+  }
+
+  // ---------- Container format ----------
+  // MAGIC(4) VER(1) sampleRate(4) numChannels(1) bitsPerSample(1) numFrames(4)
+  // metaLen(4) metaBytes(metaLen, UTF-8 JSON)
+  // per output-channel: numBlocks(4) orders(numBlocks bytes)
+  //                      alphabetSize(1) freqTable(alphabetSize * 2 bytes, uint16)
+  //                      ransLen(4) ransBytes(ransLen)
+  //                      extraBitsLen(4) extraBitsBytes(extraBitsLen)
+
+  const MAGIC = 0x4E4F5641; // 'NOVA'
+
+  function packBits(bits) {
+    const nBytes = Math.ceil(bits.length / 8);
+    const out = new Uint8Array(nBytes);
+    for (let i = 0; i < bits.length; i++) if (bits[i]) out[i >> 3] |= (1 << (i & 7));
+    return out;
+  }
+  function unpackBits(bytes, count) {
+    const out = new Array(count);
+    for (let i = 0; i < count; i++) out[i] = (bytes[i >> 3] >> (i & 7)) & 1;
+    return out;
+  }
+
+  // metadata: { tags: {...}, picture: {mime, data:Uint8Array} | null }
+  // If omitted, falls back to wav.metadata (whatever was auto-extracted from the source WAV).
+  function encode(wav, metadata) {
+    metadata = metadata || wav.metadata || { tags: {}, picture: null };
+    const tags = metadata.tags || {};
+    const picture = metadata.picture || null;
+    const { result: crossed, flags: crossFlags } = crossChannelForward(wav.channels);
+    const crossFlagBytes = packBits(crossFlags);
+    const metaJson = JSON.stringify(tags);
+    const metaBytes = new TextEncoder().encode(metaJson);
+    const mimeBytes = picture ? new TextEncoder().encode(picture.mime || 'image/jpeg') : new Uint8Array(0);
+    const picBytes = picture ? picture.data : new Uint8Array(0);
+
+    // Phase 1: process every channel, collecting per-channel byte blocks + the LMS mode
+    // each one settled on. The main header (written next) needs to include the mode
+    // bytes, so we can't stream channel bodies out until this pass is done.
+    let totalPredicted = 0, totalRans = 0, totalExtra = 0;
+    const lmsModes = [];
+    const channelBlocks = [];
+
+    for (let c = 0; c < crossed.length; c++) {
+      const { residuals, orders, lpcParams } = predictChannelForward(crossed[c]);
+      const { refined, mode } = lmsCascadeForwardAdaptive(residuals);
+      lmsModes.push(mode);
+      const blockStarts = blockStartsFor(refined.length);
+      const { symbols, riceKs, extraBytes } = riceSplitChannel(refined, blockStarts);
+      const table = buildFreqTable(symbols, ALPHABET_SIZE);
+      const ransBytes = ransEncode(symbols, table);
+
+      const lpcBuf = new ArrayBuffer(lpcParams.length * (1 + LPC_ORDER * 2));
+      const lpcDv = new DataView(lpcBuf);
+      let lp = 0;
+      for (const params of lpcParams) {
+        lpcDv.setUint8(lp, params.shift); lp += 1;
+        for (let j = 0; j < LPC_ORDER; j++) { lpcDv.setInt16(lp, params.qcoeffs[j], true); lp += 2; }
+      }
+      const lpcBytes = new Uint8Array(lpcBuf);
+
+      const chHeader = new ArrayBuffer(4 + orders.length + riceKs.length + 4 + 1 + ALPHABET_SIZE * 2 + 4 + 4);
+      const cdv = new DataView(chHeader);
+      let cp = 0;
+      cdv.setUint32(cp, orders.length, true); cp += 4;
+      for (let i = 0; i < orders.length; i++) { cdv.setUint8(cp, orders[i]); cp += 1; }
+      for (let i = 0; i < riceKs.length; i++) { cdv.setUint8(cp, riceKs[i]); cp += 1; }
+      cdv.setUint32(cp, lpcBytes.length, true); cp += 4;
+      cdv.setUint8(cp, ALPHABET_SIZE); cp += 1;
+      for (let s = 0; s < ALPHABET_SIZE; s++) { cdv.setUint16(cp, table.freq[s], true); cp += 2; }
+      cdv.setUint32(cp, ransBytes.length, true); cp += 4;
+      cdv.setUint32(cp, extraBytes.length, true); cp += 4;
+
+      channelBlocks.push(new Uint8Array(chHeader), lpcBytes, ransBytes, extraBytes);
+      totalPredicted += residuals.length;
+      totalRans += ransBytes.length;
+      totalExtra += extraBytes.length;
+    }
+
+    // Phase 2: now write the main header (mode bytes + cross-channel flags are known) and assemble.
+    const parts = [];
+    const header = new ArrayBuffer(4 + 1 + 4 + 1 + 1 + 4 + 4 + 1 + 4 + 1 + crossFlagBytes.length + wav.numChannels);
+    const hdv = new DataView(header);
+    let p = 0;
+    hdv.setUint32(p, MAGIC, false); p += 4;
+    hdv.setUint8(p, 7); p += 1; // version 7: adaptive (cost-checked) cross-channel lifting + adaptive per-channel LMS mode — never regresses vs. skipping either stage
+    hdv.setUint32(p, wav.sampleRate, true); p += 4;
+    hdv.setUint8(p, wav.numChannels); p += 1;
+    hdv.setUint8(p, wav.bitsPerSample); p += 1;
+    hdv.setUint32(p, wav.numFrames, true); p += 4;
+    hdv.setUint32(p, metaBytes.length, true); p += 4;
+    hdv.setUint8(p, mimeBytes.length); p += 1;
+    hdv.setUint32(p, picBytes.length, true); p += 4;
+    hdv.setUint8(p, crossFlagBytes.length); p += 1;
+    for (let i = 0; i < crossFlagBytes.length; i++) { hdv.setUint8(p, crossFlagBytes[i]); p += 1; }
+    for (let i = 0; i < lmsModes.length; i++) { hdv.setUint8(p, lmsModes[i]); p += 1; }
+    parts.push(new Uint8Array(header), metaBytes, mimeBytes, picBytes);
+    for (const block of channelBlocks) parts.push(block);
+
+    // concat
+    let total = 0;
+    for (const p2 of parts) total += p2.length;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const p2 of parts) { out.set(p2, off); off += p2.length; }
+
+    return { buffer: out, stats: { totalPredicted, totalRans, totalExtra } };
+  }
+
+  // Lightweight header-only reader: stops right after tags/artwork, never touches the
+  // per-channel audio blocks (which are what actually costs the 10s-30s+ full decode()
+  // takes). Essential for a library view — listing N tracks can't afford to fully decode
+  // each one just to show a title and thumbnail.
+  function readMetadata(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    const magic = dv.getUint32(p, false); p += 4;
+    if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+    const version = dv.getUint8(p); p += 1;
+    const sampleRate = dv.getUint32(p, true); p += 4;
+    const numChannels = dv.getUint8(p); p += 1;
+    const bitsPerSample = dv.getUint8(p); p += 1;
+    const numFrames = dv.getUint32(p, true); p += 4;
+    const metaLen = dv.getUint32(p, true); p += 4;
+    let mimeLen = 0, picLen = 0;
+    if (version >= 2) {
+      mimeLen = dv.getUint8(p); p += 1;
+      picLen = dv.getUint32(p, true); p += 4;
+    }
+    if (version >= 7) {
+      const crossFlagByteLen = dv.getUint8(p); p += 1;
+      p += crossFlagByteLen;
+      p += numChannels; // lmsModes, one byte each — not needed here, just skip past them
+    }
+    const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+    const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+    let picture = null;
+    if (mimeLen > 0) {
+      const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+      const data = bytes.subarray(p, p + picLen).slice();
+      picture = { mime, data };
+    }
+    return {
+      sampleRate, numChannels, bitsPerSample, numFrames,
+      durationSeconds: numFrames / sampleRate,
+      tags, picture,
+    };
+  }
+
+  function decode(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    const magic = dv.getUint32(p, false); p += 4;
+    if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+    const version = dv.getUint8(p); p += 1;
+    const sampleRate = dv.getUint32(p, true); p += 4;
+    const numChannels = dv.getUint8(p); p += 1;
+    const bitsPerSample = dv.getUint8(p); p += 1;
+    const numFrames = dv.getUint32(p, true); p += 4;
+    const metaLen = dv.getUint32(p, true); p += 4;
+    let mimeLen = 0, picLen = 0;
+    if (version >= 2) {
+      mimeLen = dv.getUint8(p); p += 1;
+      picLen = dv.getUint32(p, true); p += 4;
+    }
+    let crossFlags = [];
+    let lmsModes = new Array(numChannels).fill(0);
+    if (version >= 7) {
+      const crossFlagByteLen = dv.getUint8(p); p += 1;
+      const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+      crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+      lmsModes = [];
+      for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+    }
+    // Header (including the embedded cross-channel flags / LMS modes) is now fully consumed —
+    // only now do we pull the actual meta/artwork content, matching the order encode wrote it in.
+    const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+    const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+    let picture = null;
+    if (mimeLen > 0) {
+      const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+      const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+      picture = { mime, data };
+    }
+    const metadata = { tags, picture };
+
+    const crossed = [];
+    for (let c = 0; c < numChannels; c++) {
+      const numBlocks = dv.getUint32(p, true); p += 4;
+      const orders = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { orders[i] = dv.getUint8(p); p += 1; }
+      const riceKs = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { riceKs[i] = dv.getUint8(p); p += 1; }
+      const lpcBytesLen = dv.getUint32(p, true); p += 4;
+      const alphabetSize = dv.getUint8(p); p += 1;
+      const freq = new Uint32Array(alphabetSize);
+      for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+      const cum = new Uint32Array(alphabetSize + 1);
+      for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+      const ransLen = dv.getUint32(p, true); p += 4;
+      const extraLen = dv.getUint32(p, true); p += 4;
+      // header finished — now pull the actual content chunks, in the order they were written
+      const lpcBytes = bytes.subarray(p, p + lpcBytesLen); p += lpcBytesLen;
+      const ransBytes = bytes.subarray(p, p + ransLen); p += ransLen;
+      const extraBytes = bytes.subarray(p, p + extraLen); p += extraLen;
+
+      const lpcDv = new DataView(lpcBytes.buffer, lpcBytes.byteOffset, lpcBytes.byteLength);
+      const lpcParams = [];
+      let lp = 0;
+      while (lp < lpcBytes.length) {
+        const shift = lpcDv.getUint8(lp); lp += 1;
+        const qcoeffs = new Int32Array(LPC_ORDER);
+        for (let j = 0; j < LPC_ORDER; j++) { qcoeffs[j] = lpcDv.getInt16(lp, true); lp += 2; }
+        lpcParams.push({ shift, qcoeffs });
+      }
+
+      const symbols = ransDecode(ransBytes, { freq, cum }, numFrames);
+      const blockStarts = blockStartsFor(numFrames);
+      const residualsRefined = riceJoinChannel(symbols, riceKs, blockStarts, extraBytes, numFrames);
+      const residuals = lmsCascadeInverseAdaptive(residualsRefined, lmsModes[c]);
+      const ch = predictChannelInverse(residuals, orders, lpcParams, numFrames);
+      crossed.push(ch);
+    }
+
+    const channels = crossChannelInverse(crossed, crossFlags);
+    return { sampleRate, numChannels, bitsPerSample, numFrames, channels, metadata };
+  }
+
+  const NovaCodec = { parseWav, writeWav, encode, decode, readMetadata };
+  if (typeof module !== 'undefined' && module.exports) module.exports = NovaCodec;
+  else root.NovaCodec = NovaCodec;
+
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script type="text/plain" id="codecSource">
+// NOVA lossless multichannel audio codec - prototype
+// Pure JS, no dependencies. Works in browser (plain <script>) and Node (for testing).
+//
+// Pipeline:
+//   WAV PCM -> pairwise reversible mid/side lifting across channels
+//            -> per-block fixed integer predictor (order 0-3, FLAC-style)
+//            -> residuals bucketed (bit-length symbol + raw extra bits)
+//            -> bucket symbols entropy-coded with static rANS
+//
+// Everything here is integer arithmetic, so encode->decode is bit-exact.
+
+(function (root) {
+  'use strict';
+
+  // ---------- WAV parsing / writing ----------
+
+  // ---------- Metadata extraction: RIFF LIST/INFO chunk + embedded ID3v2 chunk ----------
+  // Many WAV files (especially ones produced by ffmpeg from FLAC) carry tags either as a
+  // simple RIFF INFO list (INAM/IART/IPRD/...) or as a full embedded ID3v2 tag block
+  // (including cover art via the APIC frame). We parse both so metadata/artwork transfer
+  // automatically instead of requiring manual re-entry.
+
+  function decodeId3Text(bytes, encoding) {
+    // encoding: 0=Latin1, 1=UTF-16 with BOM, 2=UTF-16BE no BOM, 3=UTF-8
+    if (encoding === 0 || encoding === 3) {
+      // strip trailing null(s)
+      let end = bytes.length;
+      while (end > 0 && bytes[end - 1] === 0) end--;
+      const slice = bytes.subarray(0, end);
+      return encoding === 3 ? new TextDecoder('utf-8').decode(slice) : new TextDecoder('latin1').decode(slice);
+    } else {
+      // UTF-16 (with or without BOM)
+      let start = 0;
+      let little = true;
+      if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) { little = true; start = 2; }
+      else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) { little = false; start = 2; }
+      let end = bytes.length;
+      while (end - 1 > start && bytes[end - 1] === 0 && bytes[end - 2] === 0) end -= 2;
+      const codeUnits = [];
+      for (let i = start; i + 1 < end; i += 2) {
+        codeUnits.push(little ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]));
+      }
+      return String.fromCharCode.apply(null, codeUnits);
+    }
+  }
+
+  function findNullTerminator(bytes, start, encoding) {
+    if (encoding === 1 || encoding === 2) {
+      for (let i = start; i + 1 < bytes.length; i += 2) if (bytes[i] === 0 && bytes[i + 1] === 0) return i;
+      return bytes.length;
+    } else {
+      for (let i = start; i < bytes.length; i++) if (bytes[i] === 0) return i;
+      return bytes.length;
+    }
+  }
+
+  function parseId3v2(bytes) {
+    const tags = {};
+    let picture = null;
+    if (bytes.length < 10 || bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return { tags, picture };
+    const majorVersion = bytes[3];
+    const tagSize = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+    let pos = 10;
+    const end = Math.min(10 + tagSize, bytes.length);
+    const frameIdMap = { TIT2: 'title', TPE1: 'artist', TALB: 'album', TCON: 'genre', TRCK: 'track', TDRC: 'date', TYER: 'date', TPE2: 'albumArtist', TCOM: 'composer' };
+    while (pos + 10 <= end) {
+      const frameId = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
+      if (frameId === '\0\0\0\0') break;
+      let frameSize;
+      if (majorVersion >= 4) {
+        frameSize = ((bytes[pos + 4] & 0x7f) << 21) | ((bytes[pos + 5] & 0x7f) << 14) | ((bytes[pos + 6] & 0x7f) << 7) | (bytes[pos + 7] & 0x7f);
+      } else {
+        frameSize = (bytes[pos + 4] << 24) | (bytes[pos + 5] << 16) | (bytes[pos + 6] << 8) | bytes[pos + 7];
+      }
+      const frameStart = pos + 10;
+      const frameEnd = frameStart + frameSize;
+      if (frameSize <= 0 || frameEnd > end) break;
+      const frameBytes = bytes.subarray(frameStart, frameEnd);
+
+      if (frameIdMap[frameId] && frameBytes.length > 1) {
+        const encoding = frameBytes[0];
+        tags[frameIdMap[frameId]] = decodeId3Text(frameBytes.subarray(1), encoding);
+      } else if (frameId === 'APIC' && frameBytes.length > 4) {
+        const encoding = frameBytes[0];
+        let p = 1;
+        let mimeEnd = p;
+        while (mimeEnd < frameBytes.length && frameBytes[mimeEnd] !== 0) mimeEnd++;
+        const mime = new TextDecoder('latin1').decode(frameBytes.subarray(p, mimeEnd));
+        p = mimeEnd + 1;
+        p += 1; // picture type byte
+        const descEnd = findNullTerminator(frameBytes, p, encoding);
+        p = descEnd + (encoding === 1 || encoding === 2 ? 2 : 1);
+        const imgData = frameBytes.subarray(p);
+        picture = { mime: mime || 'image/jpeg', data: imgData.slice() };
+      }
+      pos = frameEnd;
+    }
+    return { tags, picture };
+  }
+
+  function parseRiffInfo(bytes) {
+    const tags = {};
+    const infoMap = { INAM: 'title', IART: 'artist', IPRD: 'album', ICRD: 'date', IGNR: 'genre', ICMT: 'comment', ITRK: 'track' };
+    let pos = 0;
+    while (pos + 8 <= bytes.length) {
+      const id = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
+      const size = bytes[pos + 4] | (bytes[pos + 5] << 8) | (bytes[pos + 6] << 16) | (bytes[pos + 7] << 24);
+      const dataStart = pos + 8;
+      if (size < 0 || dataStart + size > bytes.length) break;
+      if (infoMap[id]) {
+        let strEnd = dataStart;
+        while (strEnd < dataStart + size && bytes[strEnd] !== 0) strEnd++;
+        tags[infoMap[id]] = new TextDecoder('utf-8').decode(bytes.subarray(dataStart, strEnd));
+      }
+      pos = dataStart + size + (size % 2);
+    }
+    return tags;
+  }
+
+  function parseWav(buf) {
+    const dv = new DataView(buf);
+    const u8 = new Uint8Array(buf);
+    if (dv.getUint32(0, false) !== 0x52494646) throw new Error('Not a RIFF file');
+    if (dv.getUint32(8, false) !== 0x57415645) throw new Error('Not a WAVE file');
+
+    let pos = 12;
+    let fmt = null, dataOffset = -1, dataLen = 0;
+    let riffInfoTags = {}, id3Tags = {}, id3Picture = null;
+    while (pos + 8 <= buf.byteLength) {
+      const id = dv.getUint32(pos, false);
+      const size = dv.getUint32(pos + 4, true);
+      const body = pos + 8;
+      if (id === 0x666d7420) { // 'fmt '
+        fmt = {
+          audioFormat: dv.getUint16(body, true),
+          numChannels: dv.getUint16(body + 2, true),
+          sampleRate: dv.getUint32(body + 4, true),
+          bitsPerSample: dv.getUint16(body + 14, true),
+        };
+      } else if (id === 0x64617461) { // 'data'
+        dataOffset = body;
+        dataLen = size;
+      } else if (id === 0x4C495354) { // 'LIST'
+        const listType = dv.getUint32(body, false);
+        if (listType === 0x494E464F) { // 'INFO'
+          riffInfoTags = parseRiffInfo(u8.subarray(body + 4, body + size));
+        }
+      } else if (id === 0x69643320 || id === 0x49443320) { // 'id3 ' or 'ID3 '
+        const parsed = parseId3v2(u8.subarray(body, body + size));
+        id3Tags = parsed.tags;
+        id3Picture = parsed.picture;
+      }
+      pos = body + size + (size % 2);
+    }
+    if (!fmt || dataOffset < 0) throw new Error('Missing fmt or data chunk');
+    // ID3 tags take priority where both exist (usually richer/more reliable), RIFF INFO fills gaps
+    const tags = Object.assign({}, riffInfoTags, id3Tags);
+    const metadata = { tags, picture: id3Picture };
+    if (fmt.audioFormat !== 1 && fmt.audioFormat !== 0xFFFE) {
+      throw new Error('Only integer PCM WAV supported in this prototype (got format ' + fmt.audioFormat + ')');
+    }
+    const bytesPerSample = fmt.bitsPerSample / 8;
+    const numChannels = fmt.numChannels;
+    const frameBytes = bytesPerSample * numChannels;
+    const numFrames = Math.floor(dataLen / frameBytes);
+
+    const channels = [];
+    for (let c = 0; c < numChannels; c++) channels.push(new Int32Array(numFrames));
+
+    let off = dataOffset;
+    if (fmt.bitsPerSample === 16) {
+      for (let i = 0; i < numFrames; i++) {
+        for (let c = 0; c < numChannels; c++) {
+          channels[c][i] = dv.getInt16(off, true);
+          off += 2;
+        }
+      }
+    } else if (fmt.bitsPerSample === 24) {
+      for (let i = 0; i < numFrames; i++) {
+        for (let c = 0; c < numChannels; c++) {
+          let b0 = dv.getUint8(off), b1 = dv.getUint8(off + 1), b2 = dv.getUint8(off + 2);
+          let v = b0 | (b1 << 8) | (b2 << 16);
+          if (v & 0x800000) v -= 0x1000000; // sign extend
+          channels[c][i] = v;
+          off += 3;
+        }
+      }
+    } else if (fmt.bitsPerSample === 32) {
+      for (let i = 0; i < numFrames; i++) {
+        for (let c = 0; c < numChannels; c++) {
+          channels[c][i] = dv.getInt32(off, true);
+          off += 4;
+        }
+      }
+    } else {
+      throw new Error('Unsupported bit depth: ' + fmt.bitsPerSample);
+    }
+
+    return {
+      sampleRate: fmt.sampleRate,
+      numChannels,
+      bitsPerSample: fmt.bitsPerSample,
+      numFrames,
+      channels,
+      metadata, // { tags: {title,artist,album,...}, picture: {mime,data} | null } extracted from the WAV itself
+    };
+  }
+
+  function writeWav({ sampleRate, numChannels, bitsPerSample, numFrames, channels }) {
+    const bytesPerSample = bitsPerSample / 8;
+    const dataLen = numFrames * numChannels * bytesPerSample;
+    const buf = new ArrayBuffer(44 + dataLen);
+    const dv = new DataView(buf);
+    let p = 0;
+    function u32(v) { dv.setUint32(p, v, true); p += 4; }
+    function u16(v) { dv.setUint16(p, v, true); p += 2; }
+    function tag(s) { for (let i = 0; i < 4; i++) dv.setUint8(p++, s.charCodeAt(i)); }
+
+    tag('RIFF'); u32(36 + dataLen); tag('WAVE');
+    tag('fmt '); u32(16); u16(1); u16(numChannels); u32(sampleRate);
+    u32(sampleRate * numChannels * bytesPerSample); u16(numChannels * bytesPerSample); u16(bitsPerSample);
+    tag('data'); u32(dataLen);
+
+    let off = 44;
+    if (bitsPerSample === 16) {
+      for (let i = 0; i < numFrames; i++)
+        for (let c = 0; c < numChannels; c++) { dv.setInt16(off, channels[c][i], true); off += 2; }
+    } else if (bitsPerSample === 24) {
+      for (let i = 0; i < numFrames; i++)
+        for (let c = 0; c < numChannels; c++) {
+          let v = channels[c][i] & 0xFFFFFF;
+          dv.setUint8(off, v & 0xFF); dv.setUint8(off + 1, (v >> 8) & 0xFF); dv.setUint8(off + 2, (v >> 16) & 0xFF);
+          off += 3;
+        }
+    } else if (bitsPerSample === 32) {
+      for (let i = 0; i < numFrames; i++)
+        for (let c = 0; c < numChannels; c++) { dv.setInt32(off, channels[c][i], true); off += 4; }
+    }
+    return buf;
+  }
+
+  // ---------- Cross-channel reversible lifting: full hierarchical decorrelation ----------
+  // A single pairwise pass (0,1),(2,3),... only captures adjacent-pair correlation
+  // (e.g. front L/R). Real inter-channel redundancy in a 7.1 bed also spans further —
+  // front pair vs. rear pair, etc. This recursively re-applies the same reversible
+  // lifting step to the "mid" outputs of each level, building a full reduction tree.
+  //
+  // Critical fix: NOT every pair is actually correlated (e.g. Center vs LFE) — forcing
+  // a lift on an uncorrelated pair adds redundancy instead of removing it. Each lift is
+  // now adaptive: cheaply compare cost with vs. without, and only commit to the lift if
+  // it actually helps. One flag bit per pair, decided once for the whole file (negligible
+  // storage), returned alongside the transformed channels so decode can mirror the choice.
+  function liftPair(L, R) {
+    const len = L.length;
+    const mid = new Int32Array(len), side = new Int32Array(len);
+    for (let i = 0; i < len; i++) {
+      const s = L[i] - R[i];
+      const m = R[i] + (s >> 1);
+      side[i] = s;
+      mid[i] = m;
+    }
+    return { mid, side };
+  }
+  function unliftPair(mid, side) {
+    const len = mid.length;
+    const L = new Int32Array(len), R = new Int32Array(len);
+    for (let i = 0; i < len; i++) {
+      const r = mid[i] - (side[i] >> 1);
+      const l = r + side[i];
+      R[i] = r;
+      L[i] = l;
+    }
+    return { L, R };
+  }
+  function sumAbs(arr) {
+    let s = 0;
+    for (let i = 0; i < arr.length; i++) { const v = arr[i]; s += v < 0 ? -v : v; }
+    return s;
+  }
+  // Rice/entropy coding cost scales with log2(magnitude), not raw magnitude — two signals
+  // with identical sumAbs can have very different actual compressed size (a few large
+  // outliers vs. many mid-sized values compress very differently). Every adaptive decision
+  // (predictor choice, cross-channel lift, LMS mode) should be judged by this, not sumAbs.
+  function estimateBits(arr) {
+    let s = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i]; const av = v < 0 ? -v : v;
+      s += Math.log2(av + 1);
+    }
+    return s;
+  }
+
+  function crossChannelForward(channels) {
+    const n = channels.length;
+    if (n <= 1) return { result: channels.slice(), flags: [] };
+    const mids = [], sides = [], pairFlags = [];
+    for (let i = 0; i < n; i += 2) {
+      if (i + 1 < n) {
+        const L = channels[i], R = channels[i + 1];
+        const { mid, side } = liftPair(L, R);
+        const costLifted = estimateBits(mid) + estimateBits(side);
+        const costPlain = estimateBits(L) + estimateBits(R);
+        if (costLifted < costPlain) {
+          mids.push(mid); sides.push(side); pairFlags.push(1);
+        } else {
+          mids.push(L); sides.push(R); pairFlags.push(0); // lift didn't help — pass both through unchanged
+        }
+      } else {
+        mids.push(channels[i]); // odd one out passes through to the next level unchanged, no flag needed
+      }
+    }
+    const { result: reducedMids, flags: subFlags } = crossChannelForward(mids);
+    return { result: reducedMids.concat(sides), flags: pairFlags.concat(subFlags) };
+  }
+
+  function crossChannelInverse(transformed, flags) {
+    const n = transformed.length;
+    if (n <= 1) return transformed.slice();
+    const numMids = Math.ceil(n / 2);
+    const numSides = n - numMids;
+    const reducedMids = transformed.slice(0, numMids);
+    const sides = transformed.slice(numMids);
+    const pairFlags = flags.slice(0, numSides);
+    const subFlags = flags.slice(numSides);
+    const mids = crossChannelInverse(reducedMids, subFlags); // undo the deeper level first (mirror of forward's recursion)
+    const result = new Array(n);
+    let sideIdx = 0;
+    for (let i = 0; i < n; i += 2) {
+      if (i + 1 < n) {
+        const flag = pairFlags[sideIdx];
+        if (flag === 1) {
+          const { L, R } = unliftPair(mids[i / 2], sides[sideIdx]);
+          result[i] = L; result[i + 1] = R;
+        } else {
+          result[i] = mids[i / 2]; result[i + 1] = sides[sideIdx]; // was passed through unchanged
+        }
+        sideIdx++;
+      } else {
+        result[i] = mids[i / 2]; // the odd-one-out that passed through unchanged
+      }
+    }
+    return result;
+  }
+
+  // ---------- Predictors: FLAC-style fixed orders 0-3, plus real adaptive LPC ----------
+  // Fixed predictors are a cheap fallback. Adaptive LPC (coefficients fit per-block via
+  // Levinson-Durbin, quantized to integers for exact reversibility) is what actually gives
+  // codecs like WavPack/Monkey's Audio/FLAC's LPC mode most of their real compression —
+  // a fixed-shape predictor can't adapt to the block's actual spectral content, LPC can.
+
+  const BLOCK = 4096;
+  const LPC_ORDER = 8;
+  const LPC_PRECISION_BITS = 14;
+  const METHOD_LPC = 4;
+
+  function autocorrelate(x, start, end, order) {
+    const r = new Float64Array(order + 1);
+    for (let lag = 0; lag <= order; lag++) {
+      let sum = 0;
+      for (let i = start + lag; i < end; i++) sum += x[i] * x[i - lag];
+      r[lag] = sum;
+    }
+    return r;
+  }
+
+  function levinsonDurbin(r, order) {
+    let err = r[0];
+    let lpc = new Float64Array(order);
+    if (err <= 0) return { lpc, ok: false };
+    for (let i = 0; i < order; i++) {
+      let acc = r[i + 1];
+      for (let j = 0; j < i; j++) acc -= lpc[j] * r[i - j];
+      const k = acc / err;
+      const newLpc = lpc.slice();
+      newLpc[i] = k;
+      for (let j = 0; j < i; j++) newLpc[j] = lpc[j] - k * lpc[i - 1 - j];
+      lpc = newLpc;
+      err *= (1 - k * k);
+      if (!(err > 0)) return { lpc, ok: false }; // numerical breakdown (e.g. near-silent block)
+    }
+    return { lpc, ok: true };
+  }
+
+  function quantizeLPC(coeffs, precisionBits) {
+    let maxCoef = 0;
+    for (let i = 0; i < coeffs.length; i++) maxCoef = Math.max(maxCoef, Math.abs(coeffs[i]));
+    if (maxCoef <= 0) return { qcoeffs: new Int32Array(coeffs.length), shift: 0, ok: false };
+    let shift = precisionBits - 1 - Math.floor(Math.log2(maxCoef)) - 1;
+    shift = Math.max(0, Math.min(shift, 30));
+    const qcoeffs = new Int32Array(coeffs.length);
+    for (let i = 0; i < coeffs.length; i++) {
+      let q = Math.round(coeffs[i] * Math.pow(2, shift));
+      q = Math.max(-32768, Math.min(32767, q));
+      qcoeffs[i] = q;
+    }
+    return { qcoeffs, shift, ok: true };
+  }
+
+  function lpcPredict(x, i, qcoeffs, shift) {
+    let acc = 0;
+    for (let j = 0; j < qcoeffs.length; j++) acc += qcoeffs[j] * x[i - 1 - j];
+    return Math.floor(acc / Math.pow(2, shift));
+  }
+
+  function fitLPCForBlock(x, start, end) {
+    if (start < LPC_ORDER) return null;
+    const r = autocorrelate(x, start, end, LPC_ORDER);
+    if (r[0] <= 0) return null; // silent/near-silent block: LPC unstable and unnecessary
+    // tiny stabilizing bias, standard practice to avoid ill-conditioning
+    r[0] *= 1 + 1e-9;
+    const { lpc, ok } = levinsonDurbin(r, LPC_ORDER);
+    if (!ok) return null;
+    const { qcoeffs, shift, ok: qok } = quantizeLPC(lpc, LPC_PRECISION_BITS);
+    if (!qok) return null;
+    return { qcoeffs, shift };
+  }
+
+  // ---------- Backward-adaptive sign-sign LMS cascade (post-predictor refinement) ----------
+  // This is the mechanism that lets Monkey's Audio and similar codecs beat forward
+  // block-adaptive LPC: the filter continuously updates its weights sample-by-sample using
+  // only already-known (causal) history, so the decoder can replay the identical adaptation
+  // deterministically — no coefficients are ever transmitted. Applied here as a refinement
+  // pass on top of the existing block-LPC residual, to mop up structure/non-stationarity a
+  // fixed 4096-sample block boundary misses.
+
+  // Two cascaded stages, matching the real "cascaded adaptive filters" technique
+  // (e.g. MPEG-4 ALS's RLS+LMS cascade): stage 1 does the heavy lifting (larger order),
+  // stage 2 mops up what stage 1's fixed order/step-size couldn't track (smaller order,
+  // cheap to run). Modest total cost increase — stage 2's order is half of stage 1's.
+  const LMS_ORDER_1 = 16, LMS_SHIFT_1 = 9;
+  const LMS_ORDER_2 = 8, LMS_SHIFT_2 = 9;
+  const LMS_WEIGHT_CLAMP = 1 << 12; // keeps order*clamp*maxSample far below 2^53 (float64 exact-integer limit) even for 32-bit audio
+
+  function lmsForward(d, order, shift) {
+    const n = d.length;
+    const w = new Int32Array(order);
+    const hist = new Float64Array(order);
+    let pos = 0; // next write position (circular buffer)
+    const e = new Float64Array(n); // NOT Int32Array — avoids silent truncation if pred briefly overshoots int32 range
+    const div = Math.pow(2, shift);
+    for (let i = 0; i < n; i++) {
+      let pred = 0;
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order; // hist[idx] = sample from j steps ago
+        pred += w[j] * hist[idx];
+      }
+      pred = Math.floor(pred / div);
+      const input = d[i];
+      const err = input - pred;
+      e[i] = err;
+      const s = err > 0 ? 1 : (err < 0 ? -1 : 0);
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        const hs = hist[idx] > 0 ? 1 : (hist[idx] < 0 ? -1 : 0);
+        let nw = w[j] + s * hs;
+        if (nw > LMS_WEIGHT_CLAMP) nw = LMS_WEIGHT_CLAMP;
+        else if (nw < -LMS_WEIGHT_CLAMP) nw = -LMS_WEIGHT_CLAMP;
+        w[j] = nw;
+      }
+      hist[pos] = input;
+      pos = (pos + 1) % order;
+    }
+    return e;
+  }
+
+  function lmsInverse(e, order, shift) {
+    const n = e.length;
+    const w = new Int32Array(order);
+    const hist = new Float64Array(order);
+    let pos = 0;
+    const d = new Float64Array(n);
+    const div = Math.pow(2, shift);
+    for (let i = 0; i < n; i++) {
+      let pred = 0;
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        pred += w[j] * hist[idx];
+      }
+      pred = Math.floor(pred / div);
+      const err = e[i];
+      const input = err + pred;
+      d[i] = input;
+      const s = err > 0 ? 1 : (err < 0 ? -1 : 0);
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        const hs = hist[idx] > 0 ? 1 : (hist[idx] < 0 ? -1 : 0);
+        let nw = w[j] + s * hs;
+        if (nw > LMS_WEIGHT_CLAMP) nw = LMS_WEIGHT_CLAMP;
+        else if (nw < -LMS_WEIGHT_CLAMP) nw = -LMS_WEIGHT_CLAMP;
+        w[j] = nw;
+      }
+      hist[pos] = input;
+      pos = (pos + 1) % order;
+    }
+    return d;
+  }
+
+  // Same fix as cross-channel: a fixed cascade isn't guaranteed to help every channel
+  // (e.g. a near-silent LFE channel has no real structure left for an adaptive filter to
+  // find — running it anyway just adds filter noise). Pick per-channel, once, whichever of
+  // {no LMS, stage 1 only, full cascade} actually has the smallest residual magnitude.
+  function lmsCascadeForwardAdaptive(d) {
+    const stage1 = lmsForward(d, LMS_ORDER_1, LMS_SHIFT_1);
+    const stage2 = lmsForward(stage1, LMS_ORDER_2, LMS_SHIFT_2);
+    const costs = [estimateBits(d), estimateBits(stage1), estimateBits(stage2)];
+    let mode = 0, best = costs[0];
+    for (let m = 1; m <= 2; m++) if (costs[m] < best) { best = costs[m]; mode = m; }
+    const chosen = mode === 0 ? d : (mode === 1 ? stage1 : stage2);
+    return { refined: chosen, mode };
+  }
+  function lmsCascadeInverseAdaptive(e, mode) {
+    if (mode === 0) return e;
+    if (mode === 1) return lmsInverse(e, LMS_ORDER_1, LMS_SHIFT_1);
+    const stage1 = lmsInverse(e, LMS_ORDER_2, LMS_SHIFT_2);
+    return lmsInverse(stage1, LMS_ORDER_1, LMS_SHIFT_1);
+  }
+
+  function predictChannelForward(x) {
+    const len = x.length;
+    const residuals = new Int32Array(len);
+    const orders = [];
+    const lpcParams = []; // { shift, qcoeffs } per block that used LPC, in block order
+
+    for (let start = 0; start < len; start += BLOCK) {
+      const end = Math.min(start + BLOCK, len);
+      let bestMethod = 0, bestCost = Infinity;
+
+      for (let order = 0; order <= 3; order++) {
+        if (start < order) continue;
+        let cost = 0;
+        for (let i = start; i < end; i++) { const r = residualAt(x, i, order); const av = r < 0 ? -r : r; cost += Math.log2(av + 1); }
+        if (cost < bestCost) { bestCost = cost; bestMethod = order; }
+      }
+      if (start < 3) bestMethod = 0;
+
+      let lpcCandidate = null;
+      if (start >= LPC_ORDER) {
+        lpcCandidate = fitLPCForBlock(x, start, end);
+        if (lpcCandidate) {
+          let cost = 0;
+          for (let i = start; i < end; i++) {
+            const pred = lpcPredict(x, i, lpcCandidate.qcoeffs, lpcCandidate.shift);
+            const r = x[i] - pred;
+            const av = r < 0 ? -r : r;
+            cost += Math.log2(av + 1);
+          }
+          if (cost < bestCost) { bestCost = cost; bestMethod = METHOD_LPC; }
+        }
+      }
+
+      orders.push(bestMethod);
+      if (bestMethod === METHOD_LPC) {
+        lpcParams.push(lpcCandidate);
+        for (let i = start; i < end; i++) residuals[i] = x[i] - lpcPredict(x, i, lpcCandidate.qcoeffs, lpcCandidate.shift);
+      } else {
+        for (let i = start; i < end; i++) residuals[i] = start < bestMethod ? x[i] : residualAt(x, i, bestMethod);
+      }
+    }
+    return { residuals, orders, lpcParams };
+  }
+
+  function residualAt(x, i, order) {
+    switch (order) {
+      case 0: return x[i];
+      case 1: return x[i] - x[i - 1];
+      case 2: return x[i] - (2 * x[i - 1] - x[i - 2]);
+      case 3: return x[i] - (3 * x[i - 1] - 3 * x[i - 2] + x[i - 3]);
+    }
+  }
+
+  function predictChannelInverse(residuals, orders, lpcParams, len) {
+    const x = new Int32Array(len);
+    let blockIdx = 0, lpcIdx = 0;
+    for (let start = 0; start < len; start += BLOCK) {
+      const end = Math.min(start + BLOCK, len);
+      const method = orders[blockIdx++];
+      if (method === METHOD_LPC) {
+        const { qcoeffs, shift } = lpcParams[lpcIdx++];
+        for (let i = start; i < end; i++) x[i] = residuals[i] + lpcPredict(x, i, qcoeffs, shift);
+        continue;
+      }
+      const order = method;
+      for (let i = start; i < end; i++) {
+        if (start < order) { x[i] = residuals[i]; continue; }
+        let pred;
+        switch (order) {
+          case 0: pred = 0; break;
+          case 1: pred = x[i - 1]; break;
+          case 2: pred = 2 * x[i - 1] - x[i - 2]; break;
+          case 3: pred = 3 * x[i - 1] - 3 * x[i - 2] + x[i - 3]; break;
+        }
+        x[i] = residuals[i] + pred;
+      }
+    }
+    return x;
+  }
+
+  // ---------- Bit writer / reader ----------
+
+  function BitWriter() {
+    this.bytes = [];
+    this.cur = 0;
+    this.nbits = 0;
+  }
+  BitWriter.prototype.writeBits = function (value, n) {
+    // writes n bits (0<=n<=24 per call is safe), MSB-first within the stream
+    for (let i = n - 1; i >= 0; i--) {
+      this.cur = (this.cur << 1) | ((value >>> i) & 1);
+      this.nbits++;
+      if (this.nbits === 8) { this.bytes.push(this.cur & 0xFF); this.cur = 0; this.nbits = 0; }
+    }
+  };
+  BitWriter.prototype.finish = function () {
+    if (this.nbits > 0) { this.cur = this.cur << (8 - this.nbits); this.bytes.push(this.cur & 0xFF); this.cur = 0; this.nbits = 0; }
+    return new Uint8Array(this.bytes);
+  };
+
+  function BitReader(bytes) {
+    this.bytes = bytes;
+    this.pos = 0;
+    this.bitpos = 0;
+  }
+  BitReader.prototype.readBits = function (n) {
+    let v = 0;
+    for (let i = 0; i < n; i++) {
+      const byte = this.bytes[this.pos];
+      const bit = (byte >> (7 - this.bitpos)) & 1;
+      v = (v << 1) | bit;
+      this.bitpos++;
+      if (this.bitpos === 8) { this.bitpos = 0; this.pos++; }
+    }
+    return v >>> 0;
+  };
+
+  // ---------- Rice-parameter residual splitting + rANS on the quotient ----------
+  // Previous approach (bit-length bucket + raw remainder) wasted most of its size on
+  // "raw" bits that weren't actually uniformly distributed. This instead picks a
+  // per-block Rice parameter k (same idea FLAC uses) so the k low bits genuinely are
+  // close to uniform, and only THOSE are stored raw — while the quotient (which FLAC
+  // would unary-code) is entropy-coded with rANS instead, using its real measured
+  // distribution rather than assuming a fixed geometric shape.
+
+  const QUOT_MAX = 40; // quotient values >= this become an escape (rare outliers)
+  const ALPHABET_SIZE = QUOT_MAX + 2; // 0..QUOT_MAX-1 normal, QUOT_MAX = escape symbol
+
+  function zigzagArray(residuals) {
+    const n = residuals.length;
+    const u = new Float64Array(n); // residual can exceed 32-bit after zigzag in pathological cases; keep headroom
+    for (let i = 0; i < n; i++) { const r = residuals[i]; u[i] = r >= 0 ? r * 2 : (-r * 2 - 1); }
+    return u;
+  }
+
+  function costForK(uSlice, k) {
+    let cost = 0;
+    const div = Math.pow(2, k);
+    for (let i = 0; i < uSlice.length; i++) {
+      const q = Math.floor(uSlice[i] / div);
+      cost += Math.min(q, QUOT_MAX) + 1 + k;
+    }
+    return cost;
+  }
+
+  function chooseRiceK(uSlice) {
+    if (uSlice.length === 0) return 0;
+    let sum = 0;
+    for (let i = 0; i < uSlice.length; i++) sum += uSlice[i];
+    const mean = sum / uSlice.length;
+    if (mean < 1) return 0;
+    let k0 = Math.max(0, Math.round(Math.log2(mean)));
+    let bestK = k0, bestCost = costForK(uSlice, k0);
+    for (const kk of [k0 - 1, k0 + 1, k0 - 2, k0 + 2]) {
+      if (kk < 0) continue;
+      const c = costForK(uSlice, kk);
+      if (c < bestCost) { bestCost = c; bestK = kk; }
+    }
+    return bestK;
+  }
+
+  function bitLengthOf(u) {
+    if (u <= 0) return 0;
+    let b = 0, t = u;
+    while (t >= 1) { t = Math.floor(t / 2); b++; }
+    return b;
+  }
+  function writeEscape(bw, u) {
+    const bitLen = bitLengthOf(u);
+    bw.writeBits(bitLen, 6); // up to 63 bits representable — plenty of headroom
+    if (bitLen > 16) { bw.writeBits(Math.floor(u / 65536), bitLen - 16); bw.writeBits(u & 0xFFFF, 16); }
+    else if (bitLen > 0) bw.writeBits(u, bitLen);
+  }
+  function readEscape(br) {
+    const bitLen = br.readBits(6);
+    if (bitLen === 0) return 0;
+    if (bitLen > 16) { const hi = br.readBits(bitLen - 16), lo = br.readBits(16); return hi * 65536 + lo; }
+    return br.readBits(bitLen);
+  }
+
+  function riceSplitChannel(residuals, blockStarts) {
+    const n = residuals.length;
+    const u = zigzagArray(residuals);
+    const numBlocks = blockStarts.length;
+    const riceKs = new Uint8Array(numBlocks);
+    const symbols = new Uint8Array(n);
+    const bw = new BitWriter();
+
+    for (let b = 0; b < numBlocks; b++) {
+      const start = blockStarts[b];
+      const end = b + 1 < numBlocks ? blockStarts[b + 1] : n;
+      const k = chooseRiceK(u.subarray(start, end));
+      riceKs[b] = k;
+      const div = Math.pow(2, k);
+      for (let i = start; i < end; i++) {
+        const q = Math.floor(u[i] / div);
+        if (q >= QUOT_MAX) {
+          symbols[i] = QUOT_MAX;
+          writeEscape(bw, u[i]);
+        } else {
+          symbols[i] = q;
+          if (k > 0) {
+            const rem = u[i] - q * div;
+            if (k > 24) { bw.writeBits(Math.floor(rem / 65536), k - 16); bw.writeBits(rem & 0xFFFF, 16); }
+            else bw.writeBits(rem, k);
+          }
+        }
+      }
+    }
+    return { symbols, riceKs, extraBytes: bw.finish() };
+  }
+
+  function riceJoinChannel(symbols, riceKs, blockStarts, extraBytes, n) {
+    const br = new BitReader(extraBytes);
+    const residuals = new Float64Array(n); // not Int32Array — LMS-domain residuals can exceed 32-bit range in extreme cases
+    const numBlocks = blockStarts.length;
+    for (let b = 0; b < numBlocks; b++) {
+      const start = blockStarts[b];
+      const end = b + 1 < numBlocks ? blockStarts[b + 1] : n;
+      const k = riceKs[b];
+      const div = Math.pow(2, k);
+      for (let i = start; i < end; i++) {
+        const sym = symbols[i];
+        let u;
+        if (sym === QUOT_MAX) {
+          u = readEscape(br);
+        } else {
+          let rem = 0;
+          if (k > 0) {
+            if (k > 24) { const hi = br.readBits(k - 16), lo = br.readBits(16); rem = hi * 65536 + lo; }
+            else rem = br.readBits(k);
+          }
+          u = sym * div + rem;
+        }
+        residuals[i] = (u % 2 === 1) ? -((u + 1) / 2) : (u / 2);
+      }
+    }
+    return residuals;
+  }
+
+  function blockStartsFor(n) {
+    const starts = [];
+    for (let s = 0; s < n; s += BLOCK) starts.push(s);
+    if (starts.length === 0) starts.push(0);
+    return starts;
+  }
+
+  // ---------- Static rANS (byte-alphabet, 32-bit state) ----------
+  // Encodes a stream of small-alphabet symbols (bucket indices, 0..~32) using
+  // their measured frequencies instead of assuming a fixed geometric shape (Rice).
+
+  const RANS_L = 1 << 16; // lower bound of normalization interval
+  const PROB_BITS = 14;
+  const PROB_SCALE = 1 << PROB_BITS;
+
+  function buildFreqTable(symbols, alphabetSize) {
+    const freq = new Uint32Array(alphabetSize);
+    for (let i = 0; i < symbols.length; i++) freq[symbols[i]]++;
+    // normalize to sum exactly PROB_SCALE, every used symbol gets >=1
+    const total = symbols.length || 1;
+    const norm = new Uint32Array(alphabetSize);
+    let sum = 0;
+    for (let s = 0; s < alphabetSize; s++) {
+      if (freq[s] === 0) { norm[s] = 0; continue; }
+      let f = Math.round(freq[s] * PROB_SCALE / total);
+      if (f === 0) f = 1;
+      norm[s] = f;
+      sum += f;
+    }
+    // fix rounding so sum === PROB_SCALE exactly
+    let diff = PROB_SCALE - sum;
+    // adjust the largest-frequency symbol(s) to absorb the difference
+    while (diff !== 0) {
+      let idx = -1, best = -1;
+      for (let s = 0; s < alphabetSize; s++) if (norm[s] > best) { best = norm[s]; idx = s; }
+      if (diff > 0) { norm[idx]++; diff--; }
+      else { if (norm[idx] > 1) { norm[idx]--; diff++; } else break; }
+    }
+    const cum = new Uint32Array(alphabetSize + 1);
+    for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + norm[s];
+    return { freq: norm, cum };
+  }
+
+  function ransEncode(symbols, table) {
+    const { freq, cum } = table;
+    let x = RANS_L;
+    const outBytes = [];
+    // encode in reverse; rANS is a stack machine
+    for (let i = symbols.length - 1; i >= 0; i--) {
+      const s = symbols[i];
+      const f = freq[s], c = cum[s];
+      const xMax = ((RANS_L >>> PROB_BITS) << 8) * f; // renorm threshold (byte-wise renorm)
+      while (x >= xMax) { outBytes.push(x & 0xFF); x = Math.floor(x / 256); }
+      x = Math.floor(x / f) * PROB_SCALE + (x % f) + c;
+    }
+    outBytes.push(x & 0xFF, (x >>> 8) & 0xFF, (x >>> 16) & 0xFF, (x >>> 24) & 0xFF);
+    outBytes.reverse();
+    return new Uint8Array(outBytes);
+  }
+
+  function ransDecode(bytes, table, count) {
+    const { freq, cum } = table;
+    let pos = 0;
+    function nextByte() { return bytes[pos++]; }
+    let x = nextByte() << 24 | nextByte() << 16 | nextByte() << 8 | nextByte();
+    x = x >>> 0;
+    // build symbol lookup by cumulative freq
+    const alphabetSize = freq.length;
+    const slot2sym = new Uint8Array(PROB_SCALE);
+    for (let s = 0; s < alphabetSize; s++) for (let j = cum[s]; j < cum[s] + freq[s]; j++) slot2sym[j] = s;
+
+    const out = new Uint8Array(count);
+    for (let i = 0; i < count; i++) {
+      const slot = x & (PROB_SCALE - 1);
+      const s = slot2sym[slot];
+      const f = freq[s], c = cum[s];
+      x = f * (x >>> PROB_BITS) + slot - c;
+      while (x < RANS_L) { x = (x * 256) + nextByte(); }
+      out[i] = s;
+    }
+    return out;
+  }
+
+  // ---------- Container format ----------
+  // MAGIC(4) VER(1) sampleRate(4) numChannels(1) bitsPerSample(1) numFrames(4)
+  // metaLen(4) metaBytes(metaLen, UTF-8 JSON)
+  // per output-channel: numBlocks(4) orders(numBlocks bytes)
+  //                      alphabetSize(1) freqTable(alphabetSize * 2 bytes, uint16)
+  //                      ransLen(4) ransBytes(ransLen)
+  //                      extraBitsLen(4) extraBitsBytes(extraBitsLen)
+
+  const MAGIC = 0x4E4F5641; // 'NOVA'
+
+  function packBits(bits) {
+    const nBytes = Math.ceil(bits.length / 8);
+    const out = new Uint8Array(nBytes);
+    for (let i = 0; i < bits.length; i++) if (bits[i]) out[i >> 3] |= (1 << (i & 7));
+    return out;
+  }
+  function unpackBits(bytes, count) {
+    const out = new Array(count);
+    for (let i = 0; i < count; i++) out[i] = (bytes[i >> 3] >> (i & 7)) & 1;
+    return out;
+  }
+
+  // metadata: { tags: {...}, picture: {mime, data:Uint8Array} | null }
+  // If omitted, falls back to wav.metadata (whatever was auto-extracted from the source WAV).
+  function encode(wav, metadata) {
+    metadata = metadata || wav.metadata || { tags: {}, picture: null };
+    const tags = metadata.tags || {};
+    const picture = metadata.picture || null;
+    const { result: crossed, flags: crossFlags } = crossChannelForward(wav.channels);
+    const crossFlagBytes = packBits(crossFlags);
+    const metaJson = JSON.stringify(tags);
+    const metaBytes = new TextEncoder().encode(metaJson);
+    const mimeBytes = picture ? new TextEncoder().encode(picture.mime || 'image/jpeg') : new Uint8Array(0);
+    const picBytes = picture ? picture.data : new Uint8Array(0);
+
+    // Phase 1: process every channel, collecting per-channel byte blocks + the LMS mode
+    // each one settled on. The main header (written next) needs to include the mode
+    // bytes, so we can't stream channel bodies out until this pass is done.
+    let totalPredicted = 0, totalRans = 0, totalExtra = 0;
+    const lmsModes = [];
+    const channelBlocks = [];
+
+    for (let c = 0; c < crossed.length; c++) {
+      const { residuals, orders, lpcParams } = predictChannelForward(crossed[c]);
+      const { refined, mode } = lmsCascadeForwardAdaptive(residuals);
+      lmsModes.push(mode);
+      const blockStarts = blockStartsFor(refined.length);
+      const { symbols, riceKs, extraBytes } = riceSplitChannel(refined, blockStarts);
+      const table = buildFreqTable(symbols, ALPHABET_SIZE);
+      const ransBytes = ransEncode(symbols, table);
+
+      const lpcBuf = new ArrayBuffer(lpcParams.length * (1 + LPC_ORDER * 2));
+      const lpcDv = new DataView(lpcBuf);
+      let lp = 0;
+      for (const params of lpcParams) {
+        lpcDv.setUint8(lp, params.shift); lp += 1;
+        for (let j = 0; j < LPC_ORDER; j++) { lpcDv.setInt16(lp, params.qcoeffs[j], true); lp += 2; }
+      }
+      const lpcBytes = new Uint8Array(lpcBuf);
+
+      const chHeader = new ArrayBuffer(4 + orders.length + riceKs.length + 4 + 1 + ALPHABET_SIZE * 2 + 4 + 4);
+      const cdv = new DataView(chHeader);
+      let cp = 0;
+      cdv.setUint32(cp, orders.length, true); cp += 4;
+      for (let i = 0; i < orders.length; i++) { cdv.setUint8(cp, orders[i]); cp += 1; }
+      for (let i = 0; i < riceKs.length; i++) { cdv.setUint8(cp, riceKs[i]); cp += 1; }
+      cdv.setUint32(cp, lpcBytes.length, true); cp += 4;
+      cdv.setUint8(cp, ALPHABET_SIZE); cp += 1;
+      for (let s = 0; s < ALPHABET_SIZE; s++) { cdv.setUint16(cp, table.freq[s], true); cp += 2; }
+      cdv.setUint32(cp, ransBytes.length, true); cp += 4;
+      cdv.setUint32(cp, extraBytes.length, true); cp += 4;
+
+      channelBlocks.push(new Uint8Array(chHeader), lpcBytes, ransBytes, extraBytes);
+      totalPredicted += residuals.length;
+      totalRans += ransBytes.length;
+      totalExtra += extraBytes.length;
+    }
+
+    // Phase 2: now write the main header (mode bytes + cross-channel flags are known) and assemble.
+    const parts = [];
+    const header = new ArrayBuffer(4 + 1 + 4 + 1 + 1 + 4 + 4 + 1 + 4 + 1 + crossFlagBytes.length + wav.numChannels);
+    const hdv = new DataView(header);
+    let p = 0;
+    hdv.setUint32(p, MAGIC, false); p += 4;
+    hdv.setUint8(p, 7); p += 1; // version 7: adaptive (cost-checked) cross-channel lifting + adaptive per-channel LMS mode — never regresses vs. skipping either stage
+    hdv.setUint32(p, wav.sampleRate, true); p += 4;
+    hdv.setUint8(p, wav.numChannels); p += 1;
+    hdv.setUint8(p, wav.bitsPerSample); p += 1;
+    hdv.setUint32(p, wav.numFrames, true); p += 4;
+    hdv.setUint32(p, metaBytes.length, true); p += 4;
+    hdv.setUint8(p, mimeBytes.length); p += 1;
+    hdv.setUint32(p, picBytes.length, true); p += 4;
+    hdv.setUint8(p, crossFlagBytes.length); p += 1;
+    for (let i = 0; i < crossFlagBytes.length; i++) { hdv.setUint8(p, crossFlagBytes[i]); p += 1; }
+    for (let i = 0; i < lmsModes.length; i++) { hdv.setUint8(p, lmsModes[i]); p += 1; }
+    parts.push(new Uint8Array(header), metaBytes, mimeBytes, picBytes);
+    for (const block of channelBlocks) parts.push(block);
+
+    // concat
+    let total = 0;
+    for (const p2 of parts) total += p2.length;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const p2 of parts) { out.set(p2, off); off += p2.length; }
+
+    return { buffer: out, stats: { totalPredicted, totalRans, totalExtra } };
+  }
+
+  // Lightweight header-only reader: stops right after tags/artwork, never touches the
+  // per-channel audio blocks (which are what actually costs the 10s-30s+ full decode()
+  // takes). Essential for a library view — listing N tracks can't afford to fully decode
+  // each one just to show a title and thumbnail.
+  function readMetadata(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    const magic = dv.getUint32(p, false); p += 4;
+    if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+    const version = dv.getUint8(p); p += 1;
+    const sampleRate = dv.getUint32(p, true); p += 4;
+    const numChannels = dv.getUint8(p); p += 1;
+    const bitsPerSample = dv.getUint8(p); p += 1;
+    const numFrames = dv.getUint32(p, true); p += 4;
+    const metaLen = dv.getUint32(p, true); p += 4;
+    let mimeLen = 0, picLen = 0;
+    if (version >= 2) {
+      mimeLen = dv.getUint8(p); p += 1;
+      picLen = dv.getUint32(p, true); p += 4;
+    }
+    if (version >= 7) {
+      const crossFlagByteLen = dv.getUint8(p); p += 1;
+      p += crossFlagByteLen;
+      p += numChannels; // lmsModes, one byte each — not needed here, just skip past them
+    }
+    const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+    const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+    let picture = null;
+    if (mimeLen > 0) {
+      const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+      const data = bytes.subarray(p, p + picLen).slice();
+      picture = { mime, data };
+    }
+    return {
+      sampleRate, numChannels, bitsPerSample, numFrames,
+      durationSeconds: numFrames / sampleRate,
+      tags, picture,
+    };
+  }
+
+  function decode(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    const magic = dv.getUint32(p, false); p += 4;
+    if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+    const version = dv.getUint8(p); p += 1;
+    const sampleRate = dv.getUint32(p, true); p += 4;
+    const numChannels = dv.getUint8(p); p += 1;
+    const bitsPerSample = dv.getUint8(p); p += 1;
+    const numFrames = dv.getUint32(p, true); p += 4;
+    const metaLen = dv.getUint32(p, true); p += 4;
+    let mimeLen = 0, picLen = 0;
+    if (version >= 2) {
+      mimeLen = dv.getUint8(p); p += 1;
+      picLen = dv.getUint32(p, true); p += 4;
+    }
+    let crossFlags = [];
+    let lmsModes = new Array(numChannels).fill(0);
+    if (version >= 7) {
+      const crossFlagByteLen = dv.getUint8(p); p += 1;
+      const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+      crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+      lmsModes = [];
+      for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+    }
+    // Header (including the embedded cross-channel flags / LMS modes) is now fully consumed —
+    // only now do we pull the actual meta/artwork content, matching the order encode wrote it in.
+    const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+    const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+    let picture = null;
+    if (mimeLen > 0) {
+      const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+      const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+      picture = { mime, data };
+    }
+    const metadata = { tags, picture };
+
+    const crossed = [];
+    for (let c = 0; c < numChannels; c++) {
+      const numBlocks = dv.getUint32(p, true); p += 4;
+      const orders = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { orders[i] = dv.getUint8(p); p += 1; }
+      const riceKs = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { riceKs[i] = dv.getUint8(p); p += 1; }
+      const lpcBytesLen = dv.getUint32(p, true); p += 4;
+      const alphabetSize = dv.getUint8(p); p += 1;
+      const freq = new Uint32Array(alphabetSize);
+      for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+      const cum = new Uint32Array(alphabetSize + 1);
+      for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+      const ransLen = dv.getUint32(p, true); p += 4;
+      const extraLen = dv.getUint32(p, true); p += 4;
+      // header finished — now pull the actual content chunks, in the order they were written
+      const lpcBytes = bytes.subarray(p, p + lpcBytesLen); p += lpcBytesLen;
+      const ransBytes = bytes.subarray(p, p + ransLen); p += ransLen;
+      const extraBytes = bytes.subarray(p, p + extraLen); p += extraLen;
+
+      const lpcDv = new DataView(lpcBytes.buffer, lpcBytes.byteOffset, lpcBytes.byteLength);
+      const lpcParams = [];
+      let lp = 0;
+      while (lp < lpcBytes.length) {
+        const shift = lpcDv.getUint8(lp); lp += 1;
+        const qcoeffs = new Int32Array(LPC_ORDER);
+        for (let j = 0; j < LPC_ORDER; j++) { qcoeffs[j] = lpcDv.getInt16(lp, true); lp += 2; }
+        lpcParams.push({ shift, qcoeffs });
+      }
+
+      const symbols = ransDecode(ransBytes, { freq, cum }, numFrames);
+      const blockStarts = blockStartsFor(numFrames);
+      const residualsRefined = riceJoinChannel(symbols, riceKs, blockStarts, extraBytes, numFrames);
+      const residuals = lmsCascadeInverseAdaptive(residualsRefined, lmsModes[c]);
+      const ch = predictChannelInverse(residuals, orders, lpcParams, numFrames);
+      crossed.push(ch);
+    }
+
+    const channels = crossChannelInverse(crossed, crossFlags);
+    return { sampleRate, numChannels, bitsPerSample, numFrames, channels, metadata };
+  }
+
+  const NovaCodec = { parseWav, writeWav, encode, decode, readMetadata };
+  if (typeof module !== 'undefined' && module.exports) module.exports = NovaCodec;
+  else root.NovaCodec = NovaCodec;
+
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// NOVA Player — app logic. Depends on NovaCodec (codec.js) being loaded first.
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const CONFIG_FILENAME = 'nova-player-config.json';
+  const DB_NAME = 'nova-player-db', DB_STORE = 'handles', DB_KEY = 'musicDir';
+
+  // ---------- IndexedDB: remember the chosen directory handle across sessions ----------
+  function idbOpen() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbSet(key, val) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(val, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function idbGet(key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, 'readonly');
+      const req = tx.objectStore(DB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // ---------- App state ----------
+  let dirHandle = null;
+  let library = [];          // [{ id, name, fileHandle, path, tags, picture, sampleRate, numChannels, bitsPerSample, durationSeconds }]
+  let playlists = {};        // { name: [trackId, ...] }
+  let queue = [];            // [trackId, ...]
+  let queuePos = -1;
+  let currentView = { type: 'library' }; // { type: 'library' } | { type: 'playlist', name }
+  let artworkUrls = new Map(); // trackId -> blob URL (cached)
+
+  function trackById(id) { return library.find(t => t.id === id); }
+
+  // ---------- Directory scanning ----------
+  async function scanDirectory(handle) {
+    // Revoke every blob URL from the outgoing library before replacing it — otherwise
+    // each folder switch/rescan leaves the old artwork blobs unreleased for the rest
+    // of the page's lifetime, a genuine unbounded leak over a long session.
+    for (const url of artworkUrls.values()) URL.revokeObjectURL(url);
+    artworkUrls.clear();
+    decodeCache.clear(); // old library's tracks are gone — nothing in the cache is valid anymore
+    library = [];
+    setStatus('Scanning folder…');
+    await walk(handle, '');
+    setStatus(`Found ${library.length} track${library.length === 1 ? '' : 's'}.`);
+    renderLibrary();
+  }
+
+  async function walk(handle, prefix) {
+    for await (const entry of handle.values()) {
+      if (entry.kind === 'directory') {
+        await walk(entry, prefix + entry.name + '/');
+      } else if (entry.kind === 'file' && /\.nova$/i.test(entry.name)) {
+        try {
+          const file = await entry.getFile();
+          const buf = new Uint8Array(await file.arrayBuffer());
+          const meta = NovaCodec.readMetadata(buf);
+          const id = prefix + entry.name;
+          library.push({
+            id, name: entry.name, path: prefix, fileHandle: entry,
+            tags: meta.tags || {}, picture: meta.picture || null,
+            sampleRate: meta.sampleRate, numChannels: meta.numChannels,
+            bitsPerSample: meta.bitsPerSample, durationSeconds: meta.durationSeconds,
+          });
+        } catch (err) {
+          console.warn('Skipping unreadable file', entry.name, err);
+        }
+      }
+    }
+    library.sort((a, b) => (a.tags.title || a.name).localeCompare(b.tags.title || b.name));
+  }
+
+  function artworkUrlFor(track) {
+    if (!track.picture || !track.picture.data || !track.picture.data.length) return null;
+    if (artworkUrls.has(track.id)) return artworkUrls.get(track.id);
+    const blob = new Blob([track.picture.data], { type: track.picture.mime || 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    artworkUrls.set(track.id, url);
+    return url;
+  }
+
+  // ---------- Config persistence (real file, written into the chosen folder) ----------
+  async function loadConfig() {
+    try {
+      const fh = await dirHandle.getFileHandle(CONFIG_FILENAME, { create: false });
+      const file = await fh.getFile();
+      const json = JSON.parse(await file.text());
+      playlists = json.playlists || {};
+    } catch (e) {
+      playlists = {}; // no config yet — fresh folder
+    }
+    renderPlaylists();
+  }
+  let saveTimer = null;
+  function saveConfigDebounced() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveConfig, 400);
+  }
+  async function saveConfig() {
+    if (!dirHandle) return;
+    try {
+      const fh = await dirHandle.getFileHandle(CONFIG_FILENAME, { create: true });
+      const writable = await fh.createWritable();
+      await writable.write(JSON.stringify({ playlists, savedAt: new Date().toISOString() }, null, 2));
+      await writable.close();
+    } catch (err) {
+      console.error('Could not save config file:', err);
+      setStatus('Warning: could not save playlist config (' + err.message + ')');
+    }
+  }
+
+  // ---------- Decode worker: keeps NovaCodec.decode() off the main thread ----------
+  // decode() is synchronous and takes 10-30s+ on real files. Running it on the main
+  // thread would freeze the UI during playback start AND during any background
+  // prefetch — defeating the point of prefetching. One persistent worker, reused for
+  // every decode request (current track and prefetches alike), processes them in order.
+  let decodeWorker = null;
+  let decodeRequestSeq = 0;
+  const pendingDecodeRequests = new Map(); // requestId -> {resolve, reject}
+
+  function getDecodeWorker() {
+    if (decodeWorker) return decodeWorker;
+    const codecSource = document.getElementById('codecSource').textContent;
+    const workerSource = codecSource + `
+      self.onmessage = function (e) {
+        const { requestId, bytes } = e.data;
+        try {
+          const decoded = NovaCodec.decode(bytes);
+          const transfer = decoded.channels.map(ch => ch.buffer);
+          self.postMessage({ requestId, ok: true, decoded: {
+            sampleRate: decoded.sampleRate, numChannels: decoded.numChannels,
+            bitsPerSample: decoded.bitsPerSample, numFrames: decoded.numFrames,
+            channels: decoded.channels,
+          } }, transfer);
+        } catch (err) {
+          self.postMessage({ requestId, ok: false, error: err.message });
+        }
+      };
+    `;
+    const blob = new Blob([workerSource], { type: 'application/javascript' });
+    decodeWorker = new Worker(URL.createObjectURL(blob));
+    decodeWorker.onmessage = (e) => {
+      const { requestId, ok, decoded, error } = e.data;
+      const pending = pendingDecodeRequests.get(requestId);
+      if (!pending) return; // stale/unknown — ignore
+      pendingDecodeRequests.delete(requestId);
+      if (ok) pending.resolve(decoded); else pending.reject(new Error(error));
+    };
+    decodeWorker.onerror = (e) => console.error('Decode worker error:', e);
+    return decodeWorker;
+  }
+
+  function decodeInWorker(bytes) {
+    const worker = getDecodeWorker();
+    const requestId = ++decodeRequestSeq;
+    return new Promise((resolve, reject) => {
+      pendingDecodeRequests.set(requestId, { resolve, reject });
+      worker.postMessage({ requestId, bytes }, [bytes.buffer]); // transfer, not copy
+    });
+  }
+
+  function buildAudioBuffer(decoded) {
+    const ctx = ensureCtx();
+    const ab = ctx.createBuffer(decoded.numChannels, decoded.numFrames, decoded.sampleRate);
+    const maxVal = Math.pow(2, decoded.bitsPerSample - 1);
+    for (let c = 0; c < decoded.numChannels; c++) {
+      const out = ab.getChannelData(c);
+      const src = decoded.channels[c];
+      for (let i = 0; i < decoded.numFrames; i++) out[i] = src[i] / maxVal;
+    }
+    return ab;
+  }
+
+  // ---------- Bounded decode cache ----------
+  // Keeps at most current + next decoded AudioBuffers resident. Anything else is
+  // explicitly dropped from the Map so the large Float32 buffers (hundreds of MB each
+  // on multichannel files) can be garbage collected, not left to accumulate.
+  const decodeCache = new Map();       // trackId -> AudioBuffer
+  const inFlightDecodes = new Map();   // trackId -> Promise<AudioBuffer>
+
+  function pruneCache(keepIds) {
+    for (const id of decodeCache.keys()) if (!keepIds.includes(id)) decodeCache.delete(id);
+  }
+
+  async function getDecodedBuffer(track) {
+    if (decodeCache.has(track.id)) return decodeCache.get(track.id);
+    if (inFlightDecodes.has(track.id)) return inFlightDecodes.get(track.id);
+    const p = (async () => {
+      const file = await track.fileHandle.getFile();
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const decoded = await decodeInWorker(buf);
+      const ab = buildAudioBuffer(decoded);
+      decodeCache.set(track.id, ab);
+      return ab;
+    })();
+    inFlightDecodes.set(track.id, p);
+    try { return await p; } finally { inFlightDecodes.delete(track.id); }
+  }
+
+  function prefetchNext() {
+    const nextId = queue[queuePos + 1];
+    if (!nextId) return;
+    const track = trackById(nextId);
+    if (!track) return;
+    if (decodeCache.has(nextId) || inFlightDecodes.has(nextId)) return;
+    getDecodedBuffer(track).then(() => {
+      pruneCache([queue[queuePos], queue[queuePos + 1]].filter(Boolean));
+    }).catch(err => console.warn('Prefetch failed for', track.name, err));
+  }
+
+  // ---------- Playback engine (raw Web Audio — supports seek via offset-based restart) ----------
+  let audioCtx = null;
+  let currentSource = null;
+  let currentBuffer = null;
+  let playStartedAtCtxTime = 0; // audioCtx.currentTime when playback of the current offset began
+  let playOffset = 0;           // seconds into the track when it (re)started
+  let isPlaying = false;
+  let rafId = null;
+
+  function ensureCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const maxCh = audioCtx.destination.maxChannelCount || 2;
+      try {
+        audioCtx.destination.channelCount = Math.min(8, maxCh);
+        audioCtx.destination.channelCountMode = 'explicit';
+        audioCtx.destination.channelInterpretation = 'discrete';
+      } catch (e) { /* some browsers restrict this; ignore and fall back to default */ }
+    }
+    return audioCtx;
+  }
+
+  function currentTimeSec() {
+    if (!isPlaying) return playOffset;
+    return playOffset + (audioCtx.currentTime - playStartedAtCtxTime);
+  }
+
+  function stopSource() {
+    if (currentSource) {
+      try { currentSource.onended = null; currentSource.stop(); } catch (e) {}
+      currentSource = null;
+    }
+  }
+
+  function startFrom(offset) {
+    const ctx = ensureCtx();
+    stopSource();
+    const src = ctx.createBufferSource();
+    src.buffer = currentBuffer;
+    src.channelInterpretation = 'discrete';
+    src.connect(ctx.destination);
+    src.onended = () => { if (isPlaying && currentTimeSec() >= currentBuffer.duration - 0.05) onTrackEnded(); };
+    src.start(0, Math.max(0, offset));
+    currentSource = src;
+    playOffset = offset;
+    playStartedAtCtxTime = ctx.currentTime;
+    isPlaying = true;
+    updateTransportUI();
+    tickProgress();
+  }
+
+  function pausePlayback() {
+    if (!isPlaying) return;
+    playOffset = currentTimeSec();
+    stopSource();
+    isPlaying = false;
+    updateTransportUI();
+  }
+
+  function resumePlayback() {
+    if (isPlaying || !currentBuffer) return;
+    startFrom(playOffset);
+  }
+
+  function seekTo(offset) {
+    if (!currentBuffer) return;
+    const wasPlaying = isPlaying;
+    stopSource();
+    playOffset = Math.max(0, Math.min(currentBuffer.duration, offset));
+    if (wasPlaying) startFrom(playOffset);
+    else updateTransportUI();
+  }
+
+  function onTrackEnded() {
+    isPlaying = false;
+    playNextInQueue();
+  }
+
+  function tickProgress() {
+    cancelAnimationFrame(rafId);
+    function frame() {
+      if (isPlaying) {
+        const t = currentTimeSec();
+        $('seekBar').value = currentBuffer ? (t / currentBuffer.duration) * 1000 : 0;
+        $('timeCurrent').textContent = fmtTime(t);
+        rafId = requestAnimationFrame(frame);
+      }
+    }
+    frame();
+  }
+
+  async function playTrack(id, addQueueContext) {
+    const track = trackById(id);
+    if (!track) return;
+    if (addQueueContext) {
+      queue = addQueueContext;
+      queuePos = queue.indexOf(id);
+    }
+    stopSource();
+    isPlaying = false;
+    currentBuffer = null;
+    const cached = decodeCache.has(id);
+    setNowPlaying(track, cached ? 'Ready' : 'Decoding…');
+    $('playPauseBtn').disabled = true;
+    try {
+      const t0 = performance.now();
+      const ab = await getDecodedBuffer(track);
+      const t1 = performance.now();
+      currentBuffer = ab;
+      $('playPauseBtn').disabled = false;
+      setNowPlaying(track, cached ? 'Ready (prefetched)' : `Decoded in ${((t1 - t0) / 1000).toFixed(1)}s`);
+      $('timeTotal').textContent = fmtTime(ab.duration);
+      startFrom(0);
+      renderQueue();
+      pruneCache([queue[queuePos], queue[queuePos + 1]].filter(Boolean));
+      prefetchNext();
+    } catch (err) {
+      setNowPlaying(track, 'Error: ' + err.message);
+      $('playPauseBtn').disabled = false;
+      console.error(err);
+    }
+  }
+
+  function playNextInQueue() {
+    if (queuePos + 1 < queue.length) { queuePos++; playTrack(queue[queuePos]); }
+    else { isPlaying = false; updateTransportUI(); }
+  }
+  function playPrevInQueue() {
+    if (currentTimeSec() > 3) { seekTo(0); return; } // scrubby-back like most players
+    if (queuePos > 0) { queuePos--; playTrack(queue[queuePos]); }
+  }
+
+  function fmtTime(sec) {
+    if (!isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function setNowPlaying(track, statusText) {
+    $('npTitle').textContent = track.tags.title || track.name;
+    $('npArtist').textContent = [track.tags.artist, track.tags.album].filter(Boolean).join(' — ');
+    const art = artworkUrlFor(track);
+    $('npArt').style.backgroundImage = art ? `url(${art})` : 'none';
+    $('npStatus').textContent = statusText || '';
+  }
+
+  function updateTransportUI() {
+    $('playPauseBtn').textContent = isPlaying ? '⏸' : '▶';
+  }
+
+  function setStatus(text) { $('statusLine').textContent = text; }
+
+  // ---------- Queue management ----------
+  function addToQueue(id) {
+    queue.push(id);
+    if (queuePos < 0) queuePos = 0;
+    renderQueue();
+    prefetchNext();
+  }
+  function addAllToQueue(ids) {
+    queue.push(...ids);
+    renderQueue();
+    prefetchNext();
+  }
+  function removeFromQueue(index) {
+    if (index === queuePos) { /* removing the currently playing item: just drop it from the list, keep playing */ }
+    queue.splice(index, 1);
+    if (index < queuePos) queuePos--;
+    renderQueue();
+    pruneCache([queue[queuePos], queue[queuePos + 1]].filter(Boolean));
+    prefetchNext();
+  }
+  function moveQueueItem(from, to) {
+    if (to < 0 || to >= queue.length) return;
+    const [item] = queue.splice(from, 1);
+    queue.splice(to, 0, item);
+    if (queuePos === from) queuePos = to;
+    else if (from < queuePos && to >= queuePos) queuePos--;
+    else if (from > queuePos && to <= queuePos) queuePos++;
+    renderQueue();
+    pruneCache([queue[queuePos], queue[queuePos + 1]].filter(Boolean));
+    prefetchNext();
+  }
+
+  // ---------- Playlist management ----------
+  function createPlaylist(name) {
+    if (!name || playlists[name]) return;
+    playlists[name] = [];
+    saveConfigDebounced();
+    renderPlaylists();
+  }
+  function deletePlaylist(name) {
+    delete playlists[name];
+    if (currentView.type === 'playlist' && currentView.name === name) currentView = { type: 'library' };
+    saveConfigDebounced();
+    renderPlaylists();
+    renderLibrary();
+  }
+  function addTrackToPlaylist(name, id) {
+    if (!playlists[name].includes(id)) playlists[name].push(id);
+    saveConfigDebounced();
+    if (currentView.type === 'playlist' && currentView.name === name) renderLibrary();
+  }
+  function removeTrackFromPlaylist(name, id) {
+    playlists[name] = playlists[name].filter(x => x !== id);
+    saveConfigDebounced();
+    if (currentView.type === 'playlist' && currentView.name === name) renderLibrary();
+  }
+
+  // ---------- Rendering ----------
+  function trackRowHtml(track, opts) {
+    opts = opts || {};
+    const art = artworkUrlFor(track);
+    const dur = fmtTime(track.durationSeconds);
+    const chLabel = track.numChannels > 2 ? `${track.numChannels}ch` : (track.numChannels === 2 ? 'stereo' : 'mono');
+    return `<div class="track-row" data-id="${escapeAttr(track.id)}">
+      <div class="track-art" style="background-image:${art ? `url(${art})` : 'none'}"></div>
+      <div class="track-info">
+        <div class="track-title">${escapeHtml(track.tags.title || track.name)}</div>
+        <div class="track-sub">${escapeHtml(track.tags.artist || '')}${track.tags.album ? ' — ' + escapeHtml(track.tags.album) : ''}</div>
+      </div>
+      <div class="track-meta">${chLabel} · ${track.bitsPerSample}-bit</div>
+      <div class="track-dur">${dur}</div>
+      <button class="icon-btn queue-add" title="Add to queue">+Q</button>
+      <button class="icon-btn playlist-add" title="Add to playlist">+PL</button>
+      ${opts.removable ? '<button class="icon-btn track-remove" title="Remove from playlist">✕</button>' : ''}
+    </div>`;
+  }
+
+  function renderLibrary() {
+    const list = currentView.type === 'library'
+      ? library
+      : (playlists[currentView.name] || []).map(trackById).filter(Boolean);
+    const q = $('searchBox').value.trim().toLowerCase();
+    const filtered = q
+      ? list.filter(t => (t.tags.title || t.name).toLowerCase().includes(q) || (t.tags.artist || '').toLowerCase().includes(q) || (t.tags.album || '').toLowerCase().includes(q))
+      : list;
+    $('viewTitle').textContent = currentView.type === 'library' ? 'Library' : currentView.name;
+    $('viewCount').textContent = filtered.length + ' track' + (filtered.length === 1 ? '' : 's');
+    $('trackList').innerHTML = filtered.length
+      ? filtered.map(t => trackRowHtml(t, { removable: currentView.type === 'playlist' })).join('')
+      : '<div class="empty-hint">No tracks here yet.</div>';
+  }
+
+  function renderPlaylists() {
+    const names = Object.keys(playlists).sort();
+    $('playlistList').innerHTML =
+      `<div class="playlist-item ${currentView.type === 'library' ? 'active' : ''}" data-view="library">📚 Library</div>` +
+      names.map(n => `<div class="playlist-item ${currentView.type === 'playlist' && currentView.name === n ? 'active' : ''}" data-view="playlist" data-name="${escapeAttr(n)}">🎵 ${escapeHtml(n)} <span class="pl-remove" data-name="${escapeAttr(n)}">✕</span></div>`).join('');
+  }
+
+  function renderQueue() {
+    $('queueList').innerHTML = queue.length
+      ? queue.map((id, i) => {
+        const t = trackById(id);
+        if (!t) return '';
+        return `<div class="queue-row ${i === queuePos ? 'playing' : ''}" data-index="${i}">
+          <span class="q-num">${i === queuePos ? '▶' : i + 1}</span>
+          <span class="q-title">${escapeHtml(t.tags.title || t.name)}</span>
+          <button class="icon-btn q-up" title="Move up">↑</button>
+          <button class="icon-btn q-down" title="Move down">↓</button>
+          <button class="icon-btn q-remove" title="Remove">✕</button>
+        </div>`;
+      }).join('')
+      : '<div class="empty-hint">Queue is empty.</div>';
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
+
+  // ---------- Event wiring ----------
+  function wireEvents() {
+    $('selectFolderBtn').addEventListener('click', selectFolder);
+
+    $('searchBox').addEventListener('input', renderLibrary);
+
+    $('newPlaylistBtn').addEventListener('click', () => {
+      const name = prompt('New playlist name:');
+      if (name) createPlaylist(name.trim());
+    });
+
+    $('playlistList').addEventListener('click', (e) => {
+      const removeName = e.target.closest('.pl-remove');
+      if (removeName) { if (confirm('Delete playlist "' + removeName.dataset.name + '"?')) deletePlaylist(removeName.dataset.name); return; }
+      const item = e.target.closest('.playlist-item');
+      if (!item) return;
+      currentView = item.dataset.view === 'library' ? { type: 'library' } : { type: 'playlist', name: item.dataset.name };
+      renderPlaylists();
+      renderLibrary();
+    });
+
+    $('trackList').addEventListener('click', (e) => {
+      const row = e.target.closest('.track-row');
+      if (!row) return;
+      const id = row.dataset.id;
+      if (e.target.closest('.queue-add')) { addToQueue(id); return; }
+      if (e.target.closest('.playlist-add')) { showPlaylistPicker(id); return; }
+      if (e.target.closest('.track-remove')) { removeTrackFromPlaylist(currentView.name, id); return; }
+      // plain click on the row: play now, queue = the rest of the current view from this point on
+      const list = currentView.type === 'library' ? library : (playlists[currentView.name] || []).map(trackById).filter(Boolean);
+      const ids = list.map(t => t.id);
+      playTrack(id, ids);
+    });
+
+    $('queueList').addEventListener('click', (e) => {
+      const row = e.target.closest('.queue-row');
+      if (!row) return;
+      const idx = parseInt(row.dataset.index, 10);
+      if (e.target.closest('.q-remove')) { removeFromQueue(idx); return; }
+      if (e.target.closest('.q-up')) { moveQueueItem(idx, idx - 1); return; }
+      if (e.target.closest('.q-down')) { moveQueueItem(idx, idx + 1); return; }
+      // click elsewhere on a queue row: jump to that track
+      queuePos = idx;
+      playTrack(queue[idx]);
+    });
+
+    $('playPauseBtn').addEventListener('click', () => {
+      if (!currentBuffer) return;
+      if (isPlaying) pausePlayback(); else resumePlayback(); tickProgress();
+      updateTransportUI();
+    });
+    $('nextBtn').addEventListener('click', playNextInQueue);
+    $('prevBtn').addEventListener('click', playPrevInQueue);
+    $('seekBar').addEventListener('input', () => {
+      if (!currentBuffer) return;
+      seekTo((parseFloat($('seekBar').value) / 1000) * currentBuffer.duration);
+    });
+  }
+
+  function showPlaylistPicker(trackId) {
+    const names = Object.keys(playlists);
+    if (!names.length) { alert('Create a playlist first (top-left "+ New Playlist").'); return; }
+    const choice = prompt('Add to which playlist?\n' + names.map((n, i) => (i + 1) + '. ' + n).join('\n') + '\n\nEnter a number:');
+    const idx = parseInt(choice, 10) - 1;
+    if (names[idx]) addTrackToPlaylist(names[idx], trackId);
+  }
+
+  async function selectFolder() {
+    if (!('showDirectoryPicker' in window)) {
+      alert('Your browser doesn\'t support folder access (needs Chrome, Edge, Opera, or Vivaldi). Firefox and Safari aren\'t supported yet.');
+      return;
+    }
+    try {
+      dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      await idbSet(DB_KEY, dirHandle);
+      $('folderName').textContent = dirHandle.name;
+      await loadConfig();
+      await scanDirectory(dirHandle);
+    } catch (err) {
+      if (err.name !== 'AbortError') { console.error(err); setStatus('Could not open folder: ' + err.message); }
+    }
+  }
+
+  async function tryRestoreFolder() {
+    try {
+      const handle = await idbGet(DB_KEY);
+      if (!handle) return;
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm === 'granted' || (await handle.requestPermission({ mode: 'readwrite' })) === 'granted') {
+        dirHandle = handle;
+        $('folderName').textContent = dirHandle.name;
+        await loadConfig();
+        await scanDirectory(dirHandle);
+      } else {
+        setStatus('Click "Select Music Folder" to grant access again.');
+      }
+    } catch (err) {
+      console.warn('Could not restore previous folder:', err);
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    wireEvents();
+    renderPlaylists();
+    renderLibrary();
+    renderQueue();
+    if (!('showDirectoryPicker' in window)) {
+      setStatus('This browser doesn\'t support the File System Access API — try Chrome, Edge, Opera, or Vivaldi.');
+    } else {
+      tryRestoreFolder();
+    }
+  });
+})();
+
+</script>
+</body>
+</html>
