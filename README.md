@@ -8,7 +8,17 @@ The world need something better for once instead of keeping the same old outdate
 
 `player.html` is a player for this custom codec!
 
+## NOVA is an experimental lossless audio codec designed to achieve better compression than existing lossless codecs while preserving bit-perfect audio and metadata.
+## NOVA is currently an experimental proof-of-concept. The current implementation is intended to demonstrate the compression concept and is not yet production-ready. Contributions from developers with experience in audio codecs, DSP, compression, C/C++, Rust, SIMD, or multimedia formats are especially welcome.
+
 ## Images:
 
 ![alt text](https://github.com/AngelGonePro/nova-next-generation-optimized-versatile-audio-codec/blob/main/media/Screenshot%202026-08-25%20100347.png)
 ![alt text](https://github.com/AngelGonePro/nova-next-generation-optimized-versatile-audio-codec/blob/main/media/Screenshot%202026-08-25%20100354.png)
+
+| Codec          |        7.1 source             |      Result |
+| -------------- | ----------------------------: | ----------: |
+| FLAC           |       ~Recording              |     ~136 MB |
+| WavPack        |       ~136 MB FLAC            |     ~105 MB |
+| Monkey's Audio |     ~136 MB FLAC              |     ~102 MB |
+| **NOVA**       | Needs to be converted to .WAV | **~100 MB** |
