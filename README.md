@@ -6,6 +6,8 @@ If anyone is willing to expand on this or wants a better lossless codec and can 
 The world need something better for once instead of keeping the same old outdated things.
 - Disclaimer: This was Vibe Coded
 
+`player.html` is a player for this custom codec!
+
 ## Images:
 
 ![alt text](https://github.com/AngelGonePro/nova-next-generation-optimized-versatile-audio-codec/blob/main/media/Screenshot%202026-08-25%20100347.png)
