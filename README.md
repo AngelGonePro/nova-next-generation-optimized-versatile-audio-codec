@@ -5,3 +5,8 @@ This is a prototype of possibly a new lossless codec for storage conscious users
 If anyone is willing to expand on this or wants a better lossless codec and can code feel free to take inspiration or fork it and make it better.
 The world need something better for once instead of keeping the same old outdated things.
 - Disclaimer: This was Vibe Coded
+
+## Images:
+
+![alt text](https://github.com/AngelGonePro/nova-next-generation-optimized-versatile-audio-codec/blob/main/media/Screenshot%202026-08-25%20100347.png)
+![alt text](https://github.com/AngelGonePro/nova-next-generation-optimized-versatile-audio-codec/blob/main/media/Screenshot%202026-08-25%20100354.png)
