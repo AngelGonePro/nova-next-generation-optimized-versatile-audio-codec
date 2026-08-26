@@ -55,6 +55,54 @@ Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html DISC
 | Monkey's Audio |     ~136 MB FLAC              |     ~102 MB |
 | **NOVA**       | Needs to be converted to .WAV | **~100 MB** |
 
+## Preliminary Observations
+
+These results are experimental and do not represent NOVA's final
+compression performance.
+
+- NOVA has successfully produced bit-exact lossless reconstructions
+  for all tested files.
+- On the tested 7.1 Hotel California material, NOVA produced a smaller
+  file than both APE and FLAC.
+- On the tested stereo material, NOVA is competitive with APE and FLAC,
+  but does not consistently beat them.
+- NOVA shows substantially different compression behavior depending on
+  the source material and bit depth.
+- A particularly significant difference was observed when testing the
+  same Chemical multichannel material at 32-bit and 24-bit depth.
+- The 32-bit Chemical test produced a 173.44 MB NOVA file from
+  273.66 MB of raw PCM (63.4%).
+- The 24-bit Chemical test produced an 80.08 MB NOVA file from
+  200.27 MB of raw PCM (40.0%).
+- In the 32-bit test, the raw extra-bits payload was 167.30 MB,
+  compared with only 63.79 MB in the 24-bit test.
+- This suggests that the current NOVA implementation may have a
+  significant inefficiency in its 32-bit sample/residual handling.
+- Further investigation is required to determine whether the cause is
+  predictor precision, residual representation, extra-bit handling,
+  entropy coding, or another aspect of the 32-bit encoding path.
+
+  ## Known Investigation: 32-bit PCM Compression
+
+Preliminary testing indicates that NOVA's current implementation
+compresses 32-bit PCM significantly less efficiently than equivalent
+24-bit material.
+
+This is currently under investigation.
+
+Example:
+
+| Source | NOVA Ratio | Raw Extra-Bits |
+|---|---:|---:|
+| Chemical 8ch 32-bit | 63.4% | 167.30 MB |
+| Chemical 8ch 24-bit | **40.0%** | **63.79 MB** |
+
+The 24-bit version also produces a larger rANS payload, suggesting that
+more of the signal is reaching the entropy-coding stage rather than
+being stored through the raw extra-bits path.
+
+This may represent a significant optimization opportunity.
+
 ## Images:
 
 ![alt text](https://github.com/AngelGonePro/nova-next-generation-optimized-versatile-audio-codec/blob/main/media/Screenshot%202026-08-25%20100347.png)
