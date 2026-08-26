@@ -8,10 +8,12 @@ The world need something better for once instead of keeping the same old outdate
 `player.html` is a player for this custom codec!
 
 ---
+
 NOVA achieves approximately 2.23:1 lossless compression on this 7.1, 24-bit, 48 kHz track at 3 minutes and 18 seconds.
 "Decoded audio is bit-for-bit identical to the source WAV."
 <br>
 NOVA currently approaches or exceeds APE-level compression in my initial tests. On the tested 7.1 material, NOVA produced a smaller file than APE. On the tested stereo material, APE's maximum compression setting produced the smallest file, with NOVA only ~0.2 MB larger while remaining smaller than FLAC. All NOVA results were bit-perfect.
+
 ---
 
 ## Test it for yourself:
