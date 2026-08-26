@@ -75,6 +75,15 @@ Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html DISC
 | | | | | | | | **FLAC** | Default | **45,327 KB** | **~71.4%** | **~28.6%** | — |
 | | | | | | | | **NOVA** | Current prototype | **44,822 KB** | **68.9%*** | **31.1%*** | **PASS** |
 
+## Codec Configuration
+
+| Codec | Compression Setting | Purpose |
+|---|---|---|
+| **NOVA** | Current prototype | Experimental codec |
+| **Monkey's Audio (APE)** | **Extra High** | Smallest APE result observed in testing |
+| **FLAC** | **Level 8** | Maximum FLAC compression |
+| **WAV** | Uncompressed PCM | Source/reference |
+
 ## Preliminary Observations
 
 These results are experimental and do not represent NOVA's final
