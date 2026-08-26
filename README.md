@@ -8,7 +8,7 @@ The world need something better for once instead of keeping the same old outdate
 `player.html` is a player for this custom codec!
 <br>
 <br>
-NOVA achieves approximately 2.23:1 lossless compression on this 7.1, 24-bit, 48 kHz track.
+NOVA achieves approximately 2.23:1 lossless compression on this 7.1, 24-bit, 48 kHz track at 3 minutes and 18 seconds.
 "Decoded audio is bit-for-bit identical to the source WAV."
 
 ## Test it for yourself:
