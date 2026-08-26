@@ -84,6 +84,10 @@ Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html DISC
 | **FLAC** | **Level 8** | Maximum FLAC compression |
 | **WAV** | Uncompressed PCM | Source/reference |
 
+> **APE note:** APE was tested at multiple compression levels. 
+> "Extra High" produced smaller files than "Insane" in the tested
+> material, so Extra High is used for the comparisons shown here.
+
 ## Preliminary Observations
 
 These results are experimental and do not represent NOVA's final
