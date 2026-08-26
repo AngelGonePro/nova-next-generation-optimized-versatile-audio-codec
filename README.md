@@ -6,26 +6,35 @@ If anyone is willing to expand on this or wants a better lossless codec and can 
 The world need something better for once instead of keeping the same old outdated things.
 
 `player.html` is a player for this custom codec!
-<br>
-<br>
+
+---
 NOVA achieves approximately 2.23:1 lossless compression on this 7.1, 24-bit, 48 kHz track at 3 minutes and 18 seconds.
 "Decoded audio is bit-for-bit identical to the source WAV."
+<br>
+NOVA currently approaches or exceeds APE-level compression in my initial tests. On the tested 7.1 material, NOVA produced a smaller file than APE. On the tested stereo material, APE's maximum compression setting produced the smallest file, with NOVA only ~0.2 MB larger while remaining smaller than FLAC. All NOVA results were bit-perfect.
+---
 
 ## Test it for yourself:
 Albums in Test file:
 - Bach — Goldberg Variations — Nicholas Angelich
 - Vivaldi — The Four Seasons — London Philharmonic / Itzhak Perlman
 <br>
+
 Takes a while to Decode but when you have a playlist its gapless :q
 <br>
+
 Made sure to use non copyrighted audio btw.
 <br>
+
 user: Guest
 <br>
+
 Pass: GuestAccount
 <br>
+
 NextCloud Link: https://cdntest.cosmoscraft.net/index.php/s/nfSGQJTLfgj8ArB
 <br>
+
 Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html
 
 ## NOVA is an experimental lossless audio codec designed to achieve better compression than existing lossless codecs while preserving bit-perfect audio and metadata.
