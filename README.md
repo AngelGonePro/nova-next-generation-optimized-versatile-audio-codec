@@ -25,7 +25,7 @@ NextCloud Link: https://cdntest.cosmoscraft.net/index.php/s/nfSGQJTLfgj8ArB
 Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html
 <br>
 <br>
-__NOVA achieves approximately 2.23:1 lossless compression on this 7.1, 24-bit, 48 kHz track.__
+NOVA achieves approximately 2.23:1 lossless compression on this 7.1, 24-bit, 48 kHz track.
 "Decoded audio is bit-for-bit identical to the source WAV."
 
 ## NOVA is an experimental lossless audio codec designed to achieve better compression than existing lossless codecs while preserving bit-perfect audio and metadata.
