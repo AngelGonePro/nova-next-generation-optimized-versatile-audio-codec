@@ -51,29 +51,36 @@ Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html DISC
 ## Detailed Compression Comparison
 
 > All NOVA results shown below passed bit-exact round-trip verification.
-> Compression ratios are calculated against the reported raw PCM size.
-> Smaller file size and lower percentage indicate better compression.
+> APE was tested at Extra High because it produced smaller files than
+> Insane in the tested material. FLAC was tested at compression level 8.
+>
+> For the Chemical comparison, the APE and FLAC files were encoded from
+> the same 24-bit / 48 kHz source used for the 24-bit NOVA test. The
+> original 32-bit WAV was converted to 24-bit / 48 kHz before FLAC/APE
+> comparison.
+>
+> Therefore, the 32-bit NOVA Chemical result is shown separately as an
+> implementation/diagnostic test and is not used as a direct APE/FLAC
+> comparison.
 
-| Song / Test | Audio Type | Channels | Bit Depth | Sample Rate | Duration | Source PCM | Codec | Compression Setting | File Size | Ratio vs PCM | Space Saved | Bit-Exact |
+| Song / Test | Audio Type | Channels | Bit Depth | Sample Rate | Duration | Raw PCM | Codec | Compression Setting | File Size | NOVA Ratio vs PCM | Space Saved | Bit-Exact |
 |---|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---|
 | **Hotel California** | Stereo | 2 | 24-bit | 48 kHz | 6:32 | 107.74 MB | WAV | Uncompressed | 110,462 KB | 100% | 0% | — |
-| | | | | | | | **APE** | **Maximum / High** | **76,771 KB** | **~71.2%** | **~28.8%** | — |
-| | | | | | | | **FLAC** | Default | **78,276 KB** | **~72.6%** | **~27.4%** | — |
-| | | | | | | | **NOVA** | Current prototype | **79,138 KB** | **71.7%*** | **28.3%*** | **PASS** |
+| | | | | | | | **APE** | **Extra High** | **76,771 KB** | — | — | — |
+| | | | | | | | **FLAC** | **Level 8** | **78,276 KB** | — | — | — |
+| | | | | | | | **NOVA** | Current prototype | **79,138 KB** | **71.7%** | **28.3%** | **PASS** |
 | **Hotel California** | 7.1 | 8 | 24-bit | 48 kHz | 6:32 | 430.95 MB | WAV | Uncompressed | 441,428 KB | 100% | 0% | — |
-| | | | | | | | **APE** | **Maximum / High** | **200,583 KB** | **~45.3%** | **~54.7%** | — |
-| | | | | | | | **FLAC** | Default | **261,354 KB** | **~59.2%** | **~40.8%** | — |
+| | | | | | | | **APE** | **Extra High** | **200,583 KB** | — | — | — |
+| | | | | | | | **FLAC** | **Level 8** | **261,354 KB** | — | — | — |
 | | | | | | | | **NOVA** | Current prototype | **193,629 KB** | **43.9%** | **56.1%** | **PASS** |
-| **Chemical — Post Malone** | 8-channel / Atmos bed | 8 | 32-bit | 48 kHz | 3:06 | 273.66 MB | WAV | Uncompressed | 280,225 KB | 100% | 0% | — |
-| | | | | | | | **APE** | **Maximum / High** | **84,147 KB** | **~30.7%** | **~69.3%** | — |
-| | | | | | | | **FLAC** | Default | **85,542 KB** | **~31.3%** | **~68.7%** | — |
-| | | | | | | | **NOVA** | Current prototype | **173,440 KB** | **63.4%** | **36.6%** | **PASS** |
-| **Chemical — Post Malone** | 8-channel / Atmos bed | 8 | 24-bit | 48 kHz | 3:02 | 200.27 MB | WAV | Uncompressed |  — | 100% | 0% | — |
+| **Chemical — Post Malone** | 8-channel / Atmos bed | 8 | **24-bit** | 48 kHz | 3:02 | 200.27 MB | WAV | Uncompressed | — | 100% | 0% | — |
+| | | | | | | | **FLAC** | **Level 8** | **85,542 KB** | — | — | — |
+| | | | | | | | **APE** | **Extra High** | **84,147 KB** | — | — | — |
 | | | | | | | | **NOVA** | Current prototype | **82,002 KB** | **40.0%** | **60.0%** | **PASS** |
 | **Unforgettable — French Montana** | Stereo | 2 | 24-bit | 48 kHz | 3:51 | 63.49 MB | WAV | Uncompressed | 65,162 KB | 100% | 0% | — |
-| | | | | | | | **APE** | **Maximum / High** | **44,097 KB** | **~69.5%** | **~30.5%** | — |
-| | | | | | | | **FLAC** | Default | **45,327 KB** | **~71.4%** | **~28.6%** | — |
-| | | | | | | | **NOVA** | Current prototype | **44,822 KB** | **68.9%*** | **31.1%*** | **PASS** |
+| | | | | | | | **APE** | **Extra High** | **44,097 KB** | — | — | — |
+| | | | | | | | **FLAC** | **Level 8** | **45,327 KB** | — | — | — |
+| | | | | | | | **NOVA** | Current prototype | **44,822 KB** | **68.9%** | **31.1%** | **PASS** |
 
 ## Codec Configuration
 
