@@ -48,12 +48,32 @@ Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html DISC
 ## NOVA is an experimental lossless audio codec designed to achieve better compression than existing lossless codecs while preserving bit-perfect audio and metadata.
 ## Development status: NOVA is currently an experimental proof-of-concept. The initial implementation was created with AI-assisted development and is intended primarily to demonstrate the concept. Contributions from developers experienced in audio compression, DSP, entropy coding, C/C++, Rust, SIMD, or multimedia formats are welcome.
 
-| Codec          |        7.1 source             |      Result |
-| -------------- | ----------------------------: | ----------: |
-| FLAC           |       ~Recording              |     ~136 MB |
-| WavPack        |       ~136 MB FLAC            |     ~105 MB |
-| Monkey's Audio |     ~136 MB FLAC              |     ~102 MB |
-| **NOVA**       | Needs to be converted to .WAV | **~100 MB** |
+## Detailed Compression Comparison
+
+> All NOVA results shown below passed bit-exact round-trip verification.
+> Compression ratios are calculated against the reported raw PCM size.
+> Smaller file size and lower percentage indicate better compression.
+
+| Song / Test | Audio Type | Channels | Bit Depth | Sample Rate | Duration | Source PCM | Codec | Compression Setting | File Size | Ratio vs PCM | Space Saved | Bit-Exact |
+|---|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---|
+| **Hotel California** | Stereo | 2 | 24-bit | 48 kHz | 6:32 | 107.74 MB | WAV | Uncompressed | 110,462 KB | 100% | 0% | — |
+| | | | | | | | **APE** | **Maximum / High** | **76,771 KB** | **~71.2%** | **~28.8%** | — |
+| | | | | | | | **FLAC** | Default | **78,276 KB** | **~72.6%** | **~27.4%** | — |
+| | | | | | | | **NOVA** | Current prototype | **79,138 KB** | **71.7%*** | **28.3%*** | **PASS** |
+| **Hotel California** | 7.1 | 8 | 24-bit | 48 kHz | 6:32 | 430.95 MB | WAV | Uncompressed | 441,428 KB | 100% | 0% | — |
+| | | | | | | | **APE** | **Maximum / High** | **200,583 KB** | **~45.3%** | **~54.7%** | — |
+| | | | | | | | **FLAC** | Default | **261,354 KB** | **~59.2%** | **~40.8%** | — |
+| | | | | | | | **NOVA** | Current prototype | **193,629 KB** | **43.9%** | **56.1%** | **PASS** |
+| **Chemical — Post Malone** | 8-channel / Atmos bed | 8 | 32-bit | 48 kHz | 3:06 | 273.66 MB | WAV | Uncompressed | 280,225 KB | 100% | 0% | — |
+| | | | | | | | **APE** | **Maximum / High** | **84,147 KB** | **~30.7%** | **~69.3%** | — |
+| | | | | | | | **FLAC** | Default | **85,542 KB** | **~31.3%** | **~68.7%** | — |
+| | | | | | | | **NOVA** | Current prototype | **173,440 KB** | **63.4%** | **36.6%** | **PASS** |
+| **Chemical — Post Malone** | 8-channel / Atmos bed | 8 | 24-bit | 48 kHz | 3:02 | 200.27 MB | WAV | Uncompressed |  — | 100% | 0% | — |
+| | | | | | | | **NOVA** | Current prototype | **82,002 KB** | **40.0%** | **60.0%** | **PASS** |
+| **Unforgettable — French Montana** | Stereo | 2 | 24-bit | 48 kHz | 3:51 | 63.49 MB | WAV | Uncompressed | 65,162 KB | 100% | 0% | — |
+| | | | | | | | **APE** | **Maximum / High** | **44,097 KB** | **~69.5%** | **~30.5%** | — |
+| | | | | | | | **FLAC** | Default | **45,327 KB** | **~71.4%** | **~28.6%** | — |
+| | | | | | | | **NOVA** | Current prototype | **44,822 KB** | **68.9%*** | **31.1%*** | **PASS** |
 
 ## Preliminary Observations
 
