@@ -187,7 +187,14 @@
     const tagSize = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
     let pos = 10;
     const end = Math.min(10 + tagSize, bytes.length);
-    const frameIdMap = { TIT2: 'title', TPE1: 'artist', TALB: 'album', TCON: 'genre', TRCK: 'track', TDRC: 'date', TYER: 'date', TPE2: 'albumArtist', TCOM: 'composer' };
+    // Simple text frames (single encoding byte + text, no further structure) — this is
+    // most standard ID3v2 tags. TIPL/IPLS (involved-people, e.g. named performers by
+    // role) use a more complex role:name list structure and aren't parsed here.
+    const frameIdMap = {
+      TIT2: 'title', TPE1: 'artist', TALB: 'album', TCON: 'genre', TRCK: 'track', TPOS: 'disc',
+      TDRC: 'date', TYER: 'date', TPE2: 'albumArtist', TCOM: 'composer', TPE3: 'conductor',
+      TEXT: 'lyricist', TCOP: 'copyright', TSRC: 'isrc', TPUB: 'publisher',
+    };
     while (pos + 10 <= end) {
       const frameId = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
       if (frameId === '\0\0\0\0') break;
@@ -204,7 +211,27 @@
 
       if (frameIdMap[frameId] && frameBytes.length > 1) {
         const encoding = frameBytes[0];
-        tags[frameIdMap[frameId]] = decodeId3Text(frameBytes.subarray(1), encoding);
+        const raw = decodeId3Text(frameBytes.subarray(1), encoding);
+        // TRCK/TPOS are often "N/M" (e.g. "3/12") — split into number + total so track
+        // order can be sorted numerically and total can be shown separately.
+        if (frameId === 'TRCK' || frameId === 'TPOS') {
+          const parts = raw.split('/');
+          tags[frameIdMap[frameId]] = parts[0].trim();
+          if (parts[1]) tags[frameIdMap[frameId] + 'Total'] = parts[1].trim();
+        } else {
+          tags[frameIdMap[frameId]] = raw;
+        }
+      } else if (frameId === 'COMM' && frameBytes.length > 5) {
+        // Comment frame: encoding byte + 3-byte language code + short description
+        // (null-terminated) + the actual comment text — a different shape from the
+        // simple text frames above.
+        const encoding = frameBytes[0];
+        const descStart = 4; // skip encoding byte + 3-byte language code
+        const descEnd = findNullTerminator(frameBytes, descStart, encoding);
+        const textStart = descEnd + (encoding === 1 || encoding === 2 ? 2 : 1);
+        if (textStart < frameBytes.length) {
+          tags.comment = decodeId3Text(frameBytes.subarray(textStart), encoding);
+        }
       } else if (frameId === 'APIC' && frameBytes.length > 4) {
         const encoding = frameBytes[0];
         let p = 1;
@@ -225,7 +252,10 @@
 
   function parseRiffInfo(bytes) {
     const tags = {};
-    const infoMap = { INAM: 'title', IART: 'artist', IPRD: 'album', ICRD: 'date', IGNR: 'genre', ICMT: 'comment', ITRK: 'track' };
+    const infoMap = {
+      INAM: 'title', IART: 'artist', IPRD: 'album', ICRD: 'date', IGNR: 'genre', ICMT: 'comment',
+      ITRK: 'track', ICOP: 'copyright', IPRT: 'track', IPUB: 'publisher',
+    };
     let pos = 0;
     while (pos + 8 <= bytes.length) {
       const id = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
@@ -620,6 +650,46 @@
     return d;
   }
 
+  // ---------- Resumable LMS inverse (streaming path) ----------
+  // Separate from lmsInverse above for the same reason as the rANS split: this carries
+  // real cross-chunk state (weights + history), and any subtle bug here must not be able
+  // to touch the already-proven non-streaming path.
+  function lmsInverseChunkInit(order) {
+    return { w: new Int32Array(order), hist: new Float64Array(order), pos: 0 };
+  }
+  function lmsInverseChunk(e, order, shift, state) {
+    const n = e.length;
+    const w = state.w, hist = state.hist;
+    let pos = state.pos;
+    const d = new Float64Array(n);
+    const div = Math.pow(2, shift);
+    for (let i = 0; i < n; i++) {
+      let pred = 0;
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        pred += w[j] * hist[idx];
+      }
+      pred = Math.floor(pred / div);
+      const err = e[i];
+      const input = err + pred;
+      d[i] = input;
+      const s = err > 0 ? 1 : (err < 0 ? -1 : 0);
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        const hs = hist[idx] > 0 ? 1 : (hist[idx] < 0 ? -1 : 0);
+        let nw = w[j] + s * hs;
+        if (nw > LMS_WEIGHT_CLAMP) nw = LMS_WEIGHT_CLAMP;
+        else if (nw < -LMS_WEIGHT_CLAMP) nw = -LMS_WEIGHT_CLAMP;
+        w[j] = nw;
+      }
+      hist[pos] = input;
+      pos = (pos + 1) % order;
+    }
+    state.pos = pos; // w and hist were mutated in place already (same typed array references)
+    return d;
+  }
+
+
   // Same fix as cross-channel: a fixed cascade isn't guaranteed to help every channel
   // (e.g. a near-silent LFE channel has no real structure left for an adaptive filter to
   // find — running it anyway just adds filter noise). Pick per-channel, once, whichever of
@@ -638,6 +708,19 @@
     if (mode === 1) return lmsInverse(e, LMS_ORDER_1, LMS_SHIFT_1);
     const stage1 = lmsInverse(e, LMS_ORDER_2, LMS_SHIFT_2);
     return lmsInverse(stage1, LMS_ORDER_1, LMS_SHIFT_1);
+  }
+
+  // ---------- Resumable LMS cascade dispatch (streaming path) ----------
+  function lmsCascadeInverseChunkInit(mode) {
+    if (mode === 0) return null;
+    if (mode === 1) return { stage1: lmsInverseChunkInit(LMS_ORDER_1) };
+    return { stage2: lmsInverseChunkInit(LMS_ORDER_2), stage1: lmsInverseChunkInit(LMS_ORDER_1) };
+  }
+  function lmsCascadeInverseChunk(e, mode, state) {
+    if (mode === 0) return e;
+    if (mode === 1) return lmsInverseChunk(e, LMS_ORDER_1, LMS_SHIFT_1, state.stage1);
+    const stage1out = lmsInverseChunk(e, LMS_ORDER_2, LMS_SHIFT_2, state.stage2);
+    return lmsInverseChunk(stage1out, LMS_ORDER_1, LMS_SHIFT_1, state.stage1);
   }
 
   function predictChannelForward(x) {
@@ -719,6 +802,41 @@
     }
     return x;
   }
+
+  // ---------- Resumable predictor inverse (streaming path) ----------
+  // Writes into a persistent, pre-allocated x[] array shared across chunk calls (index
+  // is always GLOBAL sample position, matching the original's semantics exactly) — so
+  // x[i-1] etc. correctly reads history written by a PREVIOUS chunk call. The only extra
+  // state needed is an LPC-params cursor, since lpcParams only has one entry per
+  // LPC-method block, not one per block overall.
+  function predictChannelInverseChunkInit() {
+    return { lpcIdx: 0 };
+  }
+  function predictChannelInverseChunk(residualsChunk, ordersChunk, lpcParams, lpcState, x, globalStartSample) {
+    let blockIdx = 0;
+    for (let start = globalStartSample; blockIdx < ordersChunk.length; start += BLOCK) {
+      const end = Math.min(start + BLOCK, x.length);
+      const method = ordersChunk[blockIdx++];
+      if (method === METHOD_LPC) {
+        const { qcoeffs, shift } = lpcParams[lpcState.lpcIdx++];
+        for (let i = start; i < end; i++) x[i] = residualsChunk[i - globalStartSample] + lpcPredict(x, i, qcoeffs, shift);
+        continue;
+      }
+      const order = method;
+      for (let i = start; i < end; i++) {
+        if (start < order) { x[i] = residualsChunk[i - globalStartSample]; continue; }
+        let pred;
+        switch (order) {
+          case 0: pred = 0; break;
+          case 1: pred = x[i - 1]; break;
+          case 2: pred = 2 * x[i - 1] - x[i - 2]; break;
+          case 3: pred = 3 * x[i - 1] - 3 * x[i - 2] + x[i - 3]; break;
+        }
+        x[i] = residualsChunk[i - globalStartSample] + pred;
+      }
+    }
+  }
+
 
   // ---------- Bit writer / reader ----------
 
@@ -880,6 +998,43 @@
     return residuals;
   }
 
+  // ---------- Resumable rice-join (streaming path) ----------
+  // Ties together a resumable rANS state and a persistent BitReader (the latter is
+  // already naturally resumable — it's a stateful object with its own pos/bitpos — so
+  // this just needs to not recreate it each call) to reconstruct one chunk's worth of
+  // residuals at a time.
+  function riceJoinChannelChunk(ransState, riceKsChunk, blockStarts, startBlockIdx, endBlockIdx, extraBitReader, n) {
+    const rangeStart = blockStarts[startBlockIdx];
+    const rangeEnd = endBlockIdx < blockStarts.length ? blockStarts[endBlockIdx] : n;
+    const rangeLen = rangeEnd - rangeStart;
+    const symbols = ransDecodeSymbols(ransState, rangeLen);
+    const residuals = new Float64Array(rangeLen);
+    let blockIdx = 0;
+    for (let b = startBlockIdx; b < endBlockIdx; b++) {
+      const start = blockStarts[b];
+      const end = b + 1 < blockStarts.length ? blockStarts[b + 1] : n;
+      const k = riceKsChunk[blockIdx++];
+      const div = Math.pow(2, k);
+      for (let i = start; i < end; i++) {
+        const localIdx = i - rangeStart;
+        const sym = symbols[localIdx];
+        let u;
+        if (sym === QUOT_MAX) {
+          u = readEscape(extraBitReader);
+        } else {
+          let rem = 0;
+          if (k > 0) {
+            if (k > 24) { const hi = extraBitReader.readBits(k - 16), lo = extraBitReader.readBits(16); rem = hi * 65536 + lo; }
+            else rem = extraBitReader.readBits(k);
+          }
+          u = sym * div + rem;
+        }
+        residuals[localIdx] = (u % 2 === 1) ? -((u + 1) / 2) : (u / 2);
+      }
+    }
+    return residuals;
+  }
+
   function blockStartsFor(n) {
     const starts = [];
     for (let s = 0; s < n; s += BLOCK) starts.push(s);
@@ -963,6 +1118,36 @@
     return out;
   }
 
+  // ---------- Resumable rANS decoding (streaming path) ----------
+  // Deliberately separate from ransDecode above rather than refactored from it — this
+  // touches core, already-proven decode state machinery, so any bug here is isolated
+  // from the existing decode() path rather than risking a regression in it.
+  function ransDecoderInit(bytes, table) {
+    const { freq, cum } = table;
+    let pos = 0;
+    let x = bytes[pos++] << 24 | bytes[pos++] << 16 | bytes[pos++] << 8 | bytes[pos++];
+    x = x >>> 0;
+    const alphabetSize = freq.length;
+    const slot2sym = new Uint8Array(PROB_SCALE);
+    for (let s = 0; s < alphabetSize; s++) for (let j = cum[s]; j < cum[s] + freq[s]; j++) slot2sym[j] = s;
+    return { bytes, pos, x, freq, cum, slot2sym };
+  }
+  function ransDecodeSymbols(state, count) {
+    const out = new Uint8Array(count);
+    const bytes = state.bytes, slot2sym = state.slot2sym, freq = state.freq, cum = state.cum;
+    let pos = state.pos, x = state.x;
+    for (let i = 0; i < count; i++) {
+      const slot = x & (PROB_SCALE - 1);
+      const s = slot2sym[slot];
+      const f = freq[s], c = cum[s];
+      x = f * (x >>> PROB_BITS) + slot - c;
+      while (x < RANS_L) { x = (x * 256) + bytes[pos++]; }
+      out[i] = s;
+    }
+    state.pos = pos; state.x = x;
+    return out;
+  }
+
   // ---------- Container format ----------
   // MAGIC(4) VER(1) sampleRate(4) numChannels(1) bitsPerSample(1) numFrames(4)
   // metaLen(4) metaBytes(metaLen, UTF-8 JSON)
@@ -1004,6 +1189,7 @@
     let totalPredicted = 0, totalRans = 0, totalExtra = 0;
     const lmsModes = [];
     const channelBlocks = [];
+    const channelByteLengths = []; // total bytes each channel's [header+lpc+rans+extra] occupies — needed to compute the index table below
 
     for (let c = 0; c < crossed.length; c++) {
       const { residuals, orders, lpcParams } = predictChannelForward(crossed[c]);
@@ -1036,6 +1222,7 @@
       cdv.setUint32(cp, extraBytes.length, true); cp += 4;
 
       channelBlocks.push(new Uint8Array(chHeader), lpcBytes, ransBytes, extraBytes);
+      channelByteLengths.push(chHeader.byteLength + lpcBytes.length + ransBytes.length + extraBytes.length);
       totalPredicted += residuals.length;
       totalRans += ransBytes.length;
       totalExtra += extraBytes.length;
@@ -1043,11 +1230,17 @@
 
     // Phase 2: now write the main header (mode bytes + cross-channel flags are known) and assemble.
     const parts = [];
-    const header = new ArrayBuffer(4 + 1 + 4 + 1 + 1 + 4 + 4 + 1 + 4 + 1 + crossFlagBytes.length + wav.numChannels);
+    const indexTableSize = wav.numChannels * 4; // 4 bytes per channel: absolute file offset of that channel's header
+    const header = new ArrayBuffer(4 + 1 + 4 + 1 + 1 + 4 + 4 + 1 + 4 + 1 + crossFlagBytes.length + wav.numChannels + indexTableSize);
     const hdv = new DataView(header);
     let p = 0;
     hdv.setUint32(p, MAGIC, false); p += 4;
-    hdv.setUint8(p, 7); p += 1; // version 7: adaptive (cost-checked) cross-channel lifting + adaptive per-channel LMS mode — never regresses vs. skipping either stage
+    hdv.setUint8(p, 8); p += 1; // version 8: adds a per-channel byte-offset index table right after the
+    // main header, so a network-aware decoder can locate ANY channel's header with one
+    // targeted fetch instead of having to download everything before it (channels are
+    // stored fully sequentially in the file, so without this index, reaching channel 7's
+    // header requires having already fetched channels 0-6's ENTIRE content — discovered
+    // via testing, not assumed; see the network streaming decoder for how this gets used).
     hdv.setUint32(p, wav.sampleRate, true); p += 4;
     hdv.setUint8(p, wav.numChannels); p += 1;
     hdv.setUint8(p, wav.bitsPerSample); p += 1;
@@ -1058,6 +1251,14 @@
     hdv.setUint8(p, crossFlagBytes.length); p += 1;
     for (let i = 0; i < crossFlagBytes.length; i++) { hdv.setUint8(p, crossFlagBytes[i]); p += 1; }
     for (let i = 0; i < lmsModes.length; i++) { hdv.setUint8(p, lmsModes[i]); p += 1; }
+    // Index table: now that the full header size (including this table itself) and
+    // metadata/artwork sizes are known, compute each channel's absolute file offset.
+    const channelDataStart = header.byteLength + metaBytes.length + mimeBytes.length + picBytes.length;
+    let channelCursor = channelDataStart;
+    for (let c = 0; c < wav.numChannels; c++) {
+      hdv.setUint32(p, channelCursor, true); p += 4;
+      channelCursor += channelByteLengths[c];
+    }
     parts.push(new Uint8Array(header), metaBytes, mimeBytes, picBytes);
     for (const block of channelBlocks) parts.push(block);
 
@@ -1096,6 +1297,7 @@
       p += crossFlagByteLen;
       p += numChannels; // lmsModes, one byte each — not needed here, just skip past them
     }
+    if (version >= 8) { p += numChannels * 4; } // per-channel byte-offset index table — not needed here, just skip past it
     const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
     const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
     let picture = null;
@@ -1136,6 +1338,7 @@
       lmsModes = [];
       for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
     }
+    if (version >= 8) { p += numChannels * 4; } // per-channel byte-offset index table — not used on this read path, just skip past it
     // Header (including the embedded cross-channel flags / LMS modes) is now fully consumed —
     // only now do we pull the actual meta/artwork content, matching the order encode wrote it in.
     const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
@@ -1190,7 +1393,521 @@
     return { sampleRate, numChannels, bitsPerSample, numFrames, channels, metadata };
   }
 
-  const NovaCodec = { parseWav, writeWav, encode, decode, readMetadata };
+  // ---------- Streaming decoder (progressive decode-and-play) ----------
+  // Parses the header once (duplicated from decode() rather than shared with it, so a
+  // bug here can't touch the already-proven one-shot path), then exposes
+  // decodeNextChunk(numBlocks) which can be called repeatedly to get successive PCM
+  // chunks — each call advances every channel's rANS/BitReader/LMS/predictor state by
+  // exactly that many blocks, using only the resumable primitives verified above.
+  function createStreamingDecoder(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    const magic = dv.getUint32(p, false); p += 4;
+    if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+    const version = dv.getUint8(p); p += 1;
+    const sampleRate = dv.getUint32(p, true); p += 4;
+    const numChannels = dv.getUint8(p); p += 1;
+    const bitsPerSample = dv.getUint8(p); p += 1;
+    const numFrames = dv.getUint32(p, true); p += 4;
+    const metaLen = dv.getUint32(p, true); p += 4;
+    let mimeLen = 0, picLen = 0;
+    if (version >= 2) {
+      mimeLen = dv.getUint8(p); p += 1;
+      picLen = dv.getUint32(p, true); p += 4;
+    }
+    let crossFlags = [];
+    let lmsModes = new Array(numChannels).fill(0);
+    if (version >= 7) {
+      const crossFlagByteLen = dv.getUint8(p); p += 1;
+      const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+      crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+      lmsModes = [];
+      for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+    }
+    if (version >= 8) { p += numChannels * 4; } // per-channel byte-offset index table — not used on this read path, just skip past it
+    const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+    const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+    let picture = null;
+    if (mimeLen > 0) {
+      const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+      const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+      picture = { mime, data };
+    }
+    const metadata = { tags, picture };
+
+    const blockStarts = blockStartsFor(numFrames);
+    const numBlocksTotal = blockStarts.length;
+
+    // Per-channel setup: parse each channel's header/content exactly like decode() does,
+    // but instead of fully decoding, set up resumable state for each stage.
+    const channelState = [];
+    for (let c = 0; c < numChannels; c++) {
+      const numBlocks = dv.getUint32(p, true); p += 4;
+      const orders = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { orders[i] = dv.getUint8(p); p += 1; }
+      const riceKs = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { riceKs[i] = dv.getUint8(p); p += 1; }
+      const lpcBytesLen = dv.getUint32(p, true); p += 4;
+      const alphabetSize = dv.getUint8(p); p += 1;
+      const freq = new Uint32Array(alphabetSize);
+      for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+      const cum = new Uint32Array(alphabetSize + 1);
+      for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+      const ransLen = dv.getUint32(p, true); p += 4;
+      const extraLen = dv.getUint32(p, true); p += 4;
+      const lpcBytes = bytes.subarray(p, p + lpcBytesLen); p += lpcBytesLen;
+      const ransBytes = bytes.subarray(p, p + ransLen); p += ransLen;
+      const extraBytes = bytes.subarray(p, p + extraLen); p += extraLen;
+
+      const lpcDv = new DataView(lpcBytes.buffer, lpcBytes.byteOffset, lpcBytes.byteLength);
+      const lpcParams = [];
+      let lp = 0;
+      while (lp < lpcBytes.length) {
+        const shift = lpcDv.getUint8(lp); lp += 1;
+        const qcoeffs = new Int32Array(LPC_ORDER);
+        for (let j = 0; j < LPC_ORDER; j++) { qcoeffs[j] = lpcDv.getInt16(lp, true); lp += 2; }
+        lpcParams.push({ shift, qcoeffs });
+      }
+
+      channelState.push({
+        orders, riceKs, lpcParams,
+        ransState: ransDecoderInit(ransBytes, { freq, cum }),
+        extraBitReader: new BitReader(extraBytes),
+        lmsMode: lmsModes[c],
+        lmsState: lmsCascadeInverseChunkInit(lmsModes[c]),
+        lpcState: predictChannelInverseChunkInit(),
+        x: new Int32Array(numFrames), // persistent, filled in progressively across chunk calls
+        nextBlockIdx: 0,
+      });
+    }
+
+    let nextBlockIdx = 0; // shared across channels — every channel advances in lockstep
+
+    function decodeNextChunk(numBlocksPerChunk) {
+      if (nextBlockIdx >= numBlocksTotal) return null; // already fully decoded
+      const startBlockIdx = nextBlockIdx;
+      const endBlockIdx = Math.min(startBlockIdx + numBlocksPerChunk, numBlocksTotal);
+      const rangeStart = blockStarts[startBlockIdx];
+      const rangeEnd = endBlockIdx < numBlocksTotal ? blockStarts[endBlockIdx] : numFrames;
+
+      const crossedChunks = [];
+      for (let c = 0; c < numChannels; c++) {
+        const cs = channelState[c];
+        const riceKsChunk = cs.riceKs.slice(startBlockIdx, endBlockIdx);
+        const ordersChunk = cs.orders.slice(startBlockIdx, endBlockIdx);
+        const refinedChunk = riceJoinChannelChunk(cs.ransState, riceKsChunk, blockStarts, startBlockIdx, endBlockIdx, cs.extraBitReader, numFrames);
+        const residualsChunk = lmsCascadeInverseChunk(refinedChunk, cs.lmsMode, cs.lmsState);
+        predictChannelInverseChunk(residualsChunk, ordersChunk, cs.lpcParams, cs.lpcState, cs.x, rangeStart);
+        crossedChunks.push(cs.x.subarray(rangeStart, rangeEnd));
+      }
+
+      const decodedChunk = crossChannelInverse(crossedChunks, crossFlags);
+      nextBlockIdx = endBlockIdx;
+      return { channels: decodedChunk, startSample: rangeStart, endSample: rangeEnd, done: nextBlockIdx >= numBlocksTotal };
+    }
+
+    return {
+      sampleRate, numChannels, bitsPerSample, numFrames, metadata,
+      decodeNextChunk,
+      isDone: () => nextBlockIdx >= numBlocksTotal,
+    };
+  }
+
+  // ---------- Header-only structure parse (for progressive network fetch) ----------
+  // Reads the main header, metadata/artwork, and every channel's SMALL per-block header
+  // arrays (orders, riceKs, LPC params) and length fields — WITHOUT requiring the large
+  // rANS/extra CONTENT bytes to be present. Computes each channel's exact byte offset
+  // within the full file, so the caller can fetch just the portion of just the channels
+  // actually needed for the next chunk, rather than the whole file upfront.
+  //
+  // If `bytes` doesn't extend far enough to complete this parse (e.g. artwork pushed the
+  // channel headers further into the file than what's been fetched so far), returns
+  // { needMoreBytes: true } instead of throwing, so the caller can fetch more and retry —
+  // parsing this header structure is cheap, re-running it from scratch on a larger buffer
+  // is not a meaningful cost.
+  function parseFileStructure(bytes) {
+    try {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let p = 0;
+      function need(n) { if (p + n > bytes.length) throw { needMoreBytes: true }; }
+      need(4); const magic = dv.getUint32(p, false); p += 4;
+      if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+      need(1); const version = dv.getUint8(p); p += 1;
+      need(4); const sampleRate = dv.getUint32(p, true); p += 4;
+      need(1); const numChannels = dv.getUint8(p); p += 1;
+      need(1); const bitsPerSample = dv.getUint8(p); p += 1;
+      need(4); const numFrames = dv.getUint32(p, true); p += 4;
+      need(4); const metaLen = dv.getUint32(p, true); p += 4;
+      let mimeLen = 0, picLen = 0;
+      if (version >= 2) {
+        need(1); mimeLen = dv.getUint8(p); p += 1;
+        need(4); picLen = dv.getUint32(p, true); p += 4;
+      }
+      let crossFlags = [];
+      let lmsModes = new Array(numChannels).fill(0);
+      if (version >= 7) {
+        need(1); const crossFlagByteLen = dv.getUint8(p); p += 1;
+        need(crossFlagByteLen); const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+        crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+        lmsModes = [];
+        need(numChannels);
+        for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+      }
+      let channelHeaderOffsets = null;
+      if (version >= 8) {
+        need(numChannels * 4);
+        channelHeaderOffsets = [];
+        for (let i = 0; i < numChannels; i++) { channelHeaderOffsets.push(dv.getUint32(p, true)); p += 4; }
+      }
+      need(metaLen); const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+      const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+      let picture = null;
+      if (mimeLen > 0) {
+        need(mimeLen); const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+        need(picLen); const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+        picture = { mime, data };
+      }
+      const metadata = { tags, picture };
+      const blockStarts = blockStartsFor(numFrames);
+
+      const channels = [];
+      for (let c = 0; c < numChannels; c++) {
+        need(4); const numBlocks = dv.getUint32(p, true); p += 4;
+        need(numBlocks); const orders = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+        need(numBlocks); const riceKs = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+        need(4); const lpcBytesLen = dv.getUint32(p, true); p += 4;
+        need(1); const alphabetSize = dv.getUint8(p); p += 1;
+        need(alphabetSize * 2);
+        const freq = new Uint32Array(alphabetSize);
+        for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+        const cum = new Uint32Array(alphabetSize + 1);
+        for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+        need(4); const ransLen = dv.getUint32(p, true); p += 4;
+        need(4); const extraLen = dv.getUint32(p, true); p += 4;
+        // Content offsets computed here — content itself is NOT required to be present
+        // in `bytes` for this parse to succeed; only the header fields above are.
+        const lpcBytesOffset = p; p += lpcBytesLen;
+        const ransBytesOffset = p; p += ransLen;
+        const extraBytesOffset = p; p += extraLen;
+        channels.push({
+          numBlocks, orders, riceKs, alphabetSize, freq, cum,
+          lpcBytesOffset, lpcBytesLen, ransBytesOffset, ransLen, extraBytesOffset, extraLen,
+        });
+      }
+
+      return {
+        sampleRate, numChannels, bitsPerSample, numFrames, metadata,
+        crossFlags, lmsModes, blockStarts, channels,
+        channelHeaderOffsets, hasIndex: channelHeaderOffsets !== null,
+        headerEndOffset: p, // NOT "where channel 0's content starts" despite what an earlier
+        // version of this comment claimed — by this point p has walked through EVERY
+        // channel's header AND content, so this is actually close to end-of-file. Use
+        // channelHeaderOffsets (when hasIndex is true) for the useful per-channel offsets.
+      };
+    } catch (e) {
+      if (e && e.needMoreBytes) return { needMoreBytes: true };
+      throw e;
+    }
+  }
+
+  // ---------- Header-only structure parse (for progressive network fetch) ----------
+  // parseFileStructure (above, in the OLDER v7-oriented design) walks every channel
+  // sequentially, which — as testing revealed — requires having fetched nearly the whole
+  // file to reach the LAST channel's header, since channels are stored fully sequentially.
+  // For v8+ files (which carry a channel offset index), this lighter function reads ONLY
+  // the main header/metadata/index — never attempting the sequential per-channel walk —
+  // so it stays small and fast regardless of file size.
+  function parseMainHeaderAndIndex(bytes) {
+    try {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let p = 0;
+      function need(n) { if (p + n > bytes.length) throw { needMoreBytes: true }; }
+      need(4); const magic = dv.getUint32(p, false); p += 4;
+      if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+      need(1); const version = dv.getUint8(p); p += 1;
+      need(4); const sampleRate = dv.getUint32(p, true); p += 4;
+      need(1); const numChannels = dv.getUint8(p); p += 1;
+      need(1); const bitsPerSample = dv.getUint8(p); p += 1;
+      need(4); const numFrames = dv.getUint32(p, true); p += 4;
+      need(4); const metaLen = dv.getUint32(p, true); p += 4;
+      let mimeLen = 0, picLen = 0;
+      if (version >= 2) {
+        need(1); mimeLen = dv.getUint8(p); p += 1;
+        need(4); picLen = dv.getUint32(p, true); p += 4;
+      }
+      let crossFlags = [];
+      let lmsModes = new Array(numChannels).fill(0);
+      if (version >= 7) {
+        need(1); const crossFlagByteLen = dv.getUint8(p); p += 1;
+        need(crossFlagByteLen); const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+        crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+        lmsModes = [];
+        need(numChannels);
+        for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+      }
+      let channelHeaderOffsets = null;
+      if (version >= 8) {
+        need(numChannels * 4);
+        channelHeaderOffsets = [];
+        for (let i = 0; i < numChannels; i++) { channelHeaderOffsets.push(dv.getUint32(p, true)); p += 4; }
+      }
+      need(metaLen); const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+      const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+      let picture = null;
+      if (mimeLen > 0) {
+        need(mimeLen); const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+        need(picLen); const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+        picture = { mime, data };
+      }
+      const metadata = { tags, picture };
+      return {
+        version, sampleRate, numChannels, bitsPerSample, numFrames, metadata,
+        crossFlags, lmsModes, blockStarts: blockStartsFor(numFrames),
+        channelHeaderOffsets, hasIndex: channelHeaderOffsets !== null,
+        channel0HeaderOffsetIfNoIndex: p, // only meaningful when hasIndex is false
+      };
+    } catch (e) {
+      if (e && e.needMoreBytes) return { needMoreBytes: true };
+      throw e;
+    }
+  }
+
+  // Parses ONE channel's header fields starting at `localOffset` within `bytes` —
+  // independently of any other channel. Offsets in the returned object are LOCAL to
+  // `bytes` (relative to its start); the caller adds the channel's own absolute file
+  // offset to get real file positions.
+  function parseChannelHeaderAt(bytes, localOffset) {
+    try {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let p = localOffset;
+      function need(n) { if (p + n > bytes.length) throw { needMoreBytes: true }; }
+      need(4); const numBlocks = dv.getUint32(p, true); p += 4;
+      need(numBlocks); const orders = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+      need(numBlocks); const riceKs = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+      need(4); const lpcBytesLen = dv.getUint32(p, true); p += 4;
+      need(1); const alphabetSize = dv.getUint8(p); p += 1;
+      need(alphabetSize * 2);
+      const freq = new Uint32Array(alphabetSize);
+      for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+      const cum = new Uint32Array(alphabetSize + 1);
+      for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+      need(4); const ransLen = dv.getUint32(p, true); p += 4;
+      need(4); const extraLen = dv.getUint32(p, true); p += 4;
+      const lpcBytesOffset = p;
+      const ransBytesOffset = p + lpcBytesLen;
+      const extraBytesOffset = ransBytesOffset + ransLen;
+      return { numBlocks, orders, riceKs, alphabetSize, freq, cum, lpcBytesOffset, lpcBytesLen, ransBytesOffset, ransLen, extraBytesOffset, extraLen };
+    } catch (e) {
+      if (e && e.needMoreBytes) return { needMoreBytes: true };
+      throw e;
+    }
+  }
+
+  // ---------- Network-aware streaming decoder ----------
+  // v8+ files (with the index table): fetch each channel's header independently and IN
+  // PARALLEL using its known absolute offset, then fetch a generous per-channel head
+  // start (also in parallel) — no channel depends on any other channel's data at all.
+  // Pre-v8 files (no index): falls back to fetching the whole file and using the older
+  // sequential parser — matches original, already-working behavior, just without the
+  // speed win, since there's genuinely no way to locate later channels without it.
+  async function createNetworkStreamingDecoder(fetchRangeAsync, opts) {
+    opts = opts || {};
+    const PROBE_SIZE = opts.probeSize || 512 * 1024;
+    const CHANNEL_HEADER_PROBE = opts.channelHeaderProbe || 16 * 1024;
+    // Asymmetric, not one shared size: real data (both actual tracks and synthetic
+    // testing) shows the "extra bits" stream running several times larger than the
+    // rANS-coded stream, so a single shared head-start size either starves rANS or wastes
+    // bandwidth over-fetching it. Sized to comfortably clear the FIRST chunk's threshold
+    // (defined below) with margin for a few more chunks — not the whole track; refills
+    // that happen once playback has already started aren't a problem to avoid.
+    const RANS_HEAD_START = opts.ransHeadStart || 250 * 1024;
+    const EXTRA_HEAD_START = opts.extraHeadStart || 1000 * 1024;
+    const REFILL_SIZE = opts.refillSize || 800 * 1024;
+
+    let probeBytes = await fetchRangeAsync(0, PROBE_SIZE - 1);
+    let main = parseMainHeaderAndIndex(probeBytes);
+    while (main.needMoreBytes) {
+      const more = await fetchRangeAsync(probeBytes.length, probeBytes.length + PROBE_SIZE - 1);
+      if (more.length === 0) throw new Error('Could not parse NOVA header — file may be corrupt or truncated');
+      const combined = new Uint8Array(probeBytes.length + more.length);
+      combined.set(probeBytes, 0); combined.set(more, probeBytes.length);
+      probeBytes = combined;
+      main = parseMainHeaderAndIndex(probeBytes);
+    }
+
+    let channelHeaders;
+
+    if (main.hasIndex) {
+      const headerFetches = main.channelHeaderOffsets.map(async (absOffset) => {
+        if (probeBytes.length > absOffset) {
+          const already = parseChannelHeaderAt(probeBytes, absOffset);
+          if (!already.needMoreBytes) return already;
+        }
+        let extended = await fetchRangeAsync(absOffset, absOffset + CHANNEL_HEADER_PROBE - 1);
+        let parsed = parseChannelHeaderAt(extended, 0);
+        while (parsed.needMoreBytes) {
+          const more = await fetchRangeAsync(absOffset + extended.length, absOffset + extended.length + CHANNEL_HEADER_PROBE - 1);
+          if (more.length === 0) throw new Error('Could not parse channel header — file may be corrupt or truncated');
+          const combined = new Uint8Array(extended.length + more.length);
+          combined.set(extended, 0); combined.set(more, extended.length);
+          extended = combined;
+          parsed = parseChannelHeaderAt(extended, 0);
+        }
+        // Convert offsets from "local to this channel's own probe" to absolute file offsets.
+        return {
+          ...parsed,
+          lpcBytesOffset: absOffset + parsed.lpcBytesOffset,
+          ransBytesOffset: absOffset + parsed.ransBytesOffset,
+          extraBytesOffset: absOffset + parsed.extraBytesOffset,
+        };
+      });
+      channelHeaders = await Promise.all(headerFetches);
+    } else {
+      let fullBytes = probeBytes;
+      let structure = parseFileStructure(fullBytes);
+      while (structure.needMoreBytes) {
+        const more = await fetchRangeAsync(fullBytes.length, fullBytes.length + PROBE_SIZE * 4 - 1);
+        if (more.length === 0) throw new Error('Could not parse NOVA file structure');
+        const combined = new Uint8Array(fullBytes.length + more.length);
+        combined.set(fullBytes, 0); combined.set(more, fullBytes.length);
+        fullBytes = combined;
+        structure = parseFileStructure(fullBytes);
+      }
+      channelHeaders = structure.channels;
+      probeBytes = fullBytes; // pre-v8 fallback effectively already has (most of) the file
+    }
+
+    // Per-channel buffer state, seeded with whatever the probe/header-fetch already covered.
+    const chanBuf = channelHeaders.map((ch) => {
+      function seed(offset, len) {
+        const availableFromProbe = Math.max(0, Math.min(len, probeBytes.length - offset));
+        return {
+          buf: availableFromProbe > 0 ? probeBytes.slice(offset, offset + availableFromProbe) : new Uint8Array(0),
+          fetchedUpTo: offset + availableFromProbe,
+        };
+      }
+      return { rans: seed(ch.ransBytesOffset, ch.ransLen), extra: seed(ch.extraBytesOffset, ch.extraLen) };
+    });
+
+    const headStartFetches = [];
+    for (let c = 0; c < main.numChannels; c++) {
+      const ch = channelHeaders[c], cb = chanBuf[c];
+      const ransTarget = Math.min(ch.ransBytesOffset + ch.ransLen, ch.ransBytesOffset + RANS_HEAD_START);
+      if (cb.rans.fetchedUpTo < ransTarget) {
+        headStartFetches.push(fetchRangeAsync(cb.rans.fetchedUpTo, ransTarget - 1).then(bytes => {
+          const merged = new Uint8Array(cb.rans.buf.length + bytes.length);
+          merged.set(cb.rans.buf, 0); merged.set(bytes, cb.rans.buf.length);
+          cb.rans.buf = merged; cb.rans.fetchedUpTo = ransTarget;
+        }));
+      }
+      const extraTarget = Math.min(ch.extraBytesOffset + ch.extraLen, ch.extraBytesOffset + EXTRA_HEAD_START);
+      if (cb.extra.fetchedUpTo < extraTarget) {
+        headStartFetches.push(fetchRangeAsync(cb.extra.fetchedUpTo, extraTarget - 1).then(bytes => {
+          const merged = new Uint8Array(cb.extra.buf.length + bytes.length);
+          merged.set(cb.extra.buf, 0); merged.set(bytes, cb.extra.buf.length);
+          cb.extra.buf = merged; cb.extra.fetchedUpTo = extraTarget;
+        }));
+      }
+    }
+    await Promise.all(headStartFetches);
+
+    async function ensureLpcParsed(c) {
+      const ch = channelHeaders[c];
+      if (ch.lpcBytesLen === 0) return []; // nothing to fetch — this channel used only fixed predictors, no LPC blocks at all
+      let lpcBytes = probeBytes.length >= ch.lpcBytesOffset + ch.lpcBytesLen
+        ? probeBytes.slice(ch.lpcBytesOffset, ch.lpcBytesOffset + ch.lpcBytesLen)
+        : await fetchRangeAsync(ch.lpcBytesOffset, ch.lpcBytesOffset + ch.lpcBytesLen - 1);
+      const lpcDv = new DataView(lpcBytes.buffer, lpcBytes.byteOffset, lpcBytes.byteLength);
+      const lpcParams = [];
+      let lp = 0;
+      while (lp < lpcBytes.length) {
+        const shift = lpcDv.getUint8(lp); lp += 1;
+        const qcoeffs = new Int32Array(LPC_ORDER);
+        for (let j = 0; j < LPC_ORDER; j++) { qcoeffs[j] = lpcDv.getInt16(lp, true); lp += 2; }
+        lpcParams.push({ shift, qcoeffs });
+      }
+      return lpcParams;
+    }
+
+    const channelState = new Array(main.numChannels);
+    for (let c = 0; c < main.numChannels; c++) {
+      const ch = channelHeaders[c];
+      channelState[c] = {
+        orders: ch.orders, riceKs: ch.riceKs,
+        lpcParams: await ensureLpcParsed(c),
+        ransState: ransDecoderInit(chanBuf[c].rans.buf, { freq: ch.freq, cum: ch.cum }),
+        extraBitReader: new BitReader(chanBuf[c].extra.buf),
+        lmsMode: main.lmsModes[c],
+        lmsState: lmsCascadeInverseChunkInit(main.lmsModes[c]),
+        lpcState: predictChannelInverseChunkInit(),
+        x: new Int32Array(main.numFrames),
+      };
+    }
+
+    async function ensureBuffered(c, ransAheadBytes, extraAheadBytes) {
+      const ch = channelHeaders[c], cb = chanBuf[c], cs = channelState[c];
+      if (cb.rans.fetchedUpTo < ch.ransBytesOffset + ch.ransLen && cb.rans.buf.length - cs.ransState.pos < ransAheadBytes) {
+        const target = Math.min(ch.ransBytesOffset + ch.ransLen, cb.rans.fetchedUpTo + REFILL_SIZE);
+        const more = await fetchRangeAsync(cb.rans.fetchedUpTo, target - 1);
+        const merged = new Uint8Array(cb.rans.buf.length + more.length);
+        merged.set(cb.rans.buf, 0); merged.set(more, cb.rans.buf.length);
+        cs.ransState.bytes = merged; cb.rans.buf = merged; cb.rans.fetchedUpTo = target;
+      }
+      if (cb.extra.fetchedUpTo < ch.extraBytesOffset + ch.extraLen && cb.extra.buf.length - cs.extraBitReader.pos < extraAheadBytes) {
+        const target = Math.min(ch.extraBytesOffset + ch.extraLen, cb.extra.fetchedUpTo + REFILL_SIZE);
+        const more = await fetchRangeAsync(cb.extra.fetchedUpTo, target - 1);
+        const merged = new Uint8Array(cb.extra.buf.length + more.length);
+        merged.set(cb.extra.buf, 0); merged.set(more, cb.extra.buf.length);
+        cs.extraBitReader.bytes = merged; cb.extra.buf = merged; cb.extra.fetchedUpTo = target;
+      }
+    }
+
+    let nextBlockIdx = 0;
+    const numBlocksTotal = main.blockStarts.length;
+
+    async function decodeNextChunk(numBlocksPerChunk) {
+      if (nextBlockIdx >= numBlocksTotal) return null;
+      const startBlockIdx = nextBlockIdx;
+      const endBlockIdx = Math.min(startBlockIdx + numBlocksPerChunk, numBlocksTotal);
+      const rangeStart = main.blockStarts[startBlockIdx];
+      const rangeEnd = endBlockIdx < numBlocksTotal ? main.blockStarts[endBlockIdx] : main.numFrames;
+      const chunkSamples = rangeEnd - rangeStart;
+      // Separate, realistically-sized thresholds per stream — measured real data (both
+      // real tracks and synthetic testing) shows the "extra bits" stream running several
+      // times larger than the rANS-coded stream, so one shared threshold badly over-
+      // triggers refills on the smaller stream. Still deliberately conservative (worst
+      // case, not typical case) — an oversized estimate only costs a bit of extra latency
+      // via ensureBuffered, never correctness.
+      const ransAheadBytes = chunkSamples * 2;   // ~4x realistic worst-case rANS rate
+      const extraAheadBytes = chunkSamples * 8;  // ~4x realistic worst-case extra-bits rate
+
+      const crossedChunks = [];
+      for (let c = 0; c < main.numChannels; c++) {
+        await ensureBuffered(c, ransAheadBytes, extraAheadBytes);
+        const cs = channelState[c];
+        const riceKsChunk = cs.riceKs.slice(startBlockIdx, endBlockIdx);
+        const ordersChunk = cs.orders.slice(startBlockIdx, endBlockIdx);
+        const refinedChunk = riceJoinChannelChunk(cs.ransState, riceKsChunk, main.blockStarts, startBlockIdx, endBlockIdx, cs.extraBitReader, main.numFrames);
+        const residualsChunk = lmsCascadeInverseChunk(refinedChunk, cs.lmsMode, cs.lmsState);
+        predictChannelInverseChunk(residualsChunk, ordersChunk, cs.lpcParams, cs.lpcState, cs.x, rangeStart);
+        crossedChunks.push(cs.x.subarray(rangeStart, rangeEnd));
+      }
+
+      const decodedChunk = crossChannelInverse(crossedChunks, main.crossFlags);
+      nextBlockIdx = endBlockIdx;
+      return { channels: decodedChunk, startSample: rangeStart, endSample: rangeEnd, done: nextBlockIdx >= numBlocksTotal };
+    }
+
+    return {
+      sampleRate: main.sampleRate, numChannels: main.numChannels,
+      bitsPerSample: main.bitsPerSample, numFrames: main.numFrames, metadata: main.metadata,
+      usedIndexedFastPath: main.hasIndex,
+      decodeNextChunk,
+      isDone: () => nextBlockIdx >= numBlocksTotal,
+    };
+  }
+
+  const NovaCodec = { parseWav, writeWav, encode, decode, readMetadata, createStreamingDecoder, parseFileStructure, createNetworkStreamingDecoder };
   if (typeof module !== 'undefined' && module.exports) module.exports = NovaCodec;
   else root.NovaCodec = NovaCodec;
 
@@ -1262,7 +1979,14 @@
     const tagSize = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
     let pos = 10;
     const end = Math.min(10 + tagSize, bytes.length);
-    const frameIdMap = { TIT2: 'title', TPE1: 'artist', TALB: 'album', TCON: 'genre', TRCK: 'track', TDRC: 'date', TYER: 'date', TPE2: 'albumArtist', TCOM: 'composer' };
+    // Simple text frames (single encoding byte + text, no further structure) — this is
+    // most standard ID3v2 tags. TIPL/IPLS (involved-people, e.g. named performers by
+    // role) use a more complex role:name list structure and aren't parsed here.
+    const frameIdMap = {
+      TIT2: 'title', TPE1: 'artist', TALB: 'album', TCON: 'genre', TRCK: 'track', TPOS: 'disc',
+      TDRC: 'date', TYER: 'date', TPE2: 'albumArtist', TCOM: 'composer', TPE3: 'conductor',
+      TEXT: 'lyricist', TCOP: 'copyright', TSRC: 'isrc', TPUB: 'publisher',
+    };
     while (pos + 10 <= end) {
       const frameId = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
       if (frameId === '\0\0\0\0') break;
@@ -1279,7 +2003,27 @@
 
       if (frameIdMap[frameId] && frameBytes.length > 1) {
         const encoding = frameBytes[0];
-        tags[frameIdMap[frameId]] = decodeId3Text(frameBytes.subarray(1), encoding);
+        const raw = decodeId3Text(frameBytes.subarray(1), encoding);
+        // TRCK/TPOS are often "N/M" (e.g. "3/12") — split into number + total so track
+        // order can be sorted numerically and total can be shown separately.
+        if (frameId === 'TRCK' || frameId === 'TPOS') {
+          const parts = raw.split('/');
+          tags[frameIdMap[frameId]] = parts[0].trim();
+          if (parts[1]) tags[frameIdMap[frameId] + 'Total'] = parts[1].trim();
+        } else {
+          tags[frameIdMap[frameId]] = raw;
+        }
+      } else if (frameId === 'COMM' && frameBytes.length > 5) {
+        // Comment frame: encoding byte + 3-byte language code + short description
+        // (null-terminated) + the actual comment text — a different shape from the
+        // simple text frames above.
+        const encoding = frameBytes[0];
+        const descStart = 4; // skip encoding byte + 3-byte language code
+        const descEnd = findNullTerminator(frameBytes, descStart, encoding);
+        const textStart = descEnd + (encoding === 1 || encoding === 2 ? 2 : 1);
+        if (textStart < frameBytes.length) {
+          tags.comment = decodeId3Text(frameBytes.subarray(textStart), encoding);
+        }
       } else if (frameId === 'APIC' && frameBytes.length > 4) {
         const encoding = frameBytes[0];
         let p = 1;
@@ -1300,7 +2044,10 @@
 
   function parseRiffInfo(bytes) {
     const tags = {};
-    const infoMap = { INAM: 'title', IART: 'artist', IPRD: 'album', ICRD: 'date', IGNR: 'genre', ICMT: 'comment', ITRK: 'track' };
+    const infoMap = {
+      INAM: 'title', IART: 'artist', IPRD: 'album', ICRD: 'date', IGNR: 'genre', ICMT: 'comment',
+      ITRK: 'track', ICOP: 'copyright', IPRT: 'track', IPUB: 'publisher',
+    };
     let pos = 0;
     while (pos + 8 <= bytes.length) {
       const id = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
@@ -1695,6 +2442,46 @@
     return d;
   }
 
+  // ---------- Resumable LMS inverse (streaming path) ----------
+  // Separate from lmsInverse above for the same reason as the rANS split: this carries
+  // real cross-chunk state (weights + history), and any subtle bug here must not be able
+  // to touch the already-proven non-streaming path.
+  function lmsInverseChunkInit(order) {
+    return { w: new Int32Array(order), hist: new Float64Array(order), pos: 0 };
+  }
+  function lmsInverseChunk(e, order, shift, state) {
+    const n = e.length;
+    const w = state.w, hist = state.hist;
+    let pos = state.pos;
+    const d = new Float64Array(n);
+    const div = Math.pow(2, shift);
+    for (let i = 0; i < n; i++) {
+      let pred = 0;
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        pred += w[j] * hist[idx];
+      }
+      pred = Math.floor(pred / div);
+      const err = e[i];
+      const input = err + pred;
+      d[i] = input;
+      const s = err > 0 ? 1 : (err < 0 ? -1 : 0);
+      for (let j = 0; j < order; j++) {
+        const idx = (pos - 1 - j + order * 2) % order;
+        const hs = hist[idx] > 0 ? 1 : (hist[idx] < 0 ? -1 : 0);
+        let nw = w[j] + s * hs;
+        if (nw > LMS_WEIGHT_CLAMP) nw = LMS_WEIGHT_CLAMP;
+        else if (nw < -LMS_WEIGHT_CLAMP) nw = -LMS_WEIGHT_CLAMP;
+        w[j] = nw;
+      }
+      hist[pos] = input;
+      pos = (pos + 1) % order;
+    }
+    state.pos = pos; // w and hist were mutated in place already (same typed array references)
+    return d;
+  }
+
+
   // Same fix as cross-channel: a fixed cascade isn't guaranteed to help every channel
   // (e.g. a near-silent LFE channel has no real structure left for an adaptive filter to
   // find — running it anyway just adds filter noise). Pick per-channel, once, whichever of
@@ -1713,6 +2500,19 @@
     if (mode === 1) return lmsInverse(e, LMS_ORDER_1, LMS_SHIFT_1);
     const stage1 = lmsInverse(e, LMS_ORDER_2, LMS_SHIFT_2);
     return lmsInverse(stage1, LMS_ORDER_1, LMS_SHIFT_1);
+  }
+
+  // ---------- Resumable LMS cascade dispatch (streaming path) ----------
+  function lmsCascadeInverseChunkInit(mode) {
+    if (mode === 0) return null;
+    if (mode === 1) return { stage1: lmsInverseChunkInit(LMS_ORDER_1) };
+    return { stage2: lmsInverseChunkInit(LMS_ORDER_2), stage1: lmsInverseChunkInit(LMS_ORDER_1) };
+  }
+  function lmsCascadeInverseChunk(e, mode, state) {
+    if (mode === 0) return e;
+    if (mode === 1) return lmsInverseChunk(e, LMS_ORDER_1, LMS_SHIFT_1, state.stage1);
+    const stage1out = lmsInverseChunk(e, LMS_ORDER_2, LMS_SHIFT_2, state.stage2);
+    return lmsInverseChunk(stage1out, LMS_ORDER_1, LMS_SHIFT_1, state.stage1);
   }
 
   function predictChannelForward(x) {
@@ -1794,6 +2594,41 @@
     }
     return x;
   }
+
+  // ---------- Resumable predictor inverse (streaming path) ----------
+  // Writes into a persistent, pre-allocated x[] array shared across chunk calls (index
+  // is always GLOBAL sample position, matching the original's semantics exactly) — so
+  // x[i-1] etc. correctly reads history written by a PREVIOUS chunk call. The only extra
+  // state needed is an LPC-params cursor, since lpcParams only has one entry per
+  // LPC-method block, not one per block overall.
+  function predictChannelInverseChunkInit() {
+    return { lpcIdx: 0 };
+  }
+  function predictChannelInverseChunk(residualsChunk, ordersChunk, lpcParams, lpcState, x, globalStartSample) {
+    let blockIdx = 0;
+    for (let start = globalStartSample; blockIdx < ordersChunk.length; start += BLOCK) {
+      const end = Math.min(start + BLOCK, x.length);
+      const method = ordersChunk[blockIdx++];
+      if (method === METHOD_LPC) {
+        const { qcoeffs, shift } = lpcParams[lpcState.lpcIdx++];
+        for (let i = start; i < end; i++) x[i] = residualsChunk[i - globalStartSample] + lpcPredict(x, i, qcoeffs, shift);
+        continue;
+      }
+      const order = method;
+      for (let i = start; i < end; i++) {
+        if (start < order) { x[i] = residualsChunk[i - globalStartSample]; continue; }
+        let pred;
+        switch (order) {
+          case 0: pred = 0; break;
+          case 1: pred = x[i - 1]; break;
+          case 2: pred = 2 * x[i - 1] - x[i - 2]; break;
+          case 3: pred = 3 * x[i - 1] - 3 * x[i - 2] + x[i - 3]; break;
+        }
+        x[i] = residualsChunk[i - globalStartSample] + pred;
+      }
+    }
+  }
+
 
   // ---------- Bit writer / reader ----------
 
@@ -1955,6 +2790,43 @@
     return residuals;
   }
 
+  // ---------- Resumable rice-join (streaming path) ----------
+  // Ties together a resumable rANS state and a persistent BitReader (the latter is
+  // already naturally resumable — it's a stateful object with its own pos/bitpos — so
+  // this just needs to not recreate it each call) to reconstruct one chunk's worth of
+  // residuals at a time.
+  function riceJoinChannelChunk(ransState, riceKsChunk, blockStarts, startBlockIdx, endBlockIdx, extraBitReader, n) {
+    const rangeStart = blockStarts[startBlockIdx];
+    const rangeEnd = endBlockIdx < blockStarts.length ? blockStarts[endBlockIdx] : n;
+    const rangeLen = rangeEnd - rangeStart;
+    const symbols = ransDecodeSymbols(ransState, rangeLen);
+    const residuals = new Float64Array(rangeLen);
+    let blockIdx = 0;
+    for (let b = startBlockIdx; b < endBlockIdx; b++) {
+      const start = blockStarts[b];
+      const end = b + 1 < blockStarts.length ? blockStarts[b + 1] : n;
+      const k = riceKsChunk[blockIdx++];
+      const div = Math.pow(2, k);
+      for (let i = start; i < end; i++) {
+        const localIdx = i - rangeStart;
+        const sym = symbols[localIdx];
+        let u;
+        if (sym === QUOT_MAX) {
+          u = readEscape(extraBitReader);
+        } else {
+          let rem = 0;
+          if (k > 0) {
+            if (k > 24) { const hi = extraBitReader.readBits(k - 16), lo = extraBitReader.readBits(16); rem = hi * 65536 + lo; }
+            else rem = extraBitReader.readBits(k);
+          }
+          u = sym * div + rem;
+        }
+        residuals[localIdx] = (u % 2 === 1) ? -((u + 1) / 2) : (u / 2);
+      }
+    }
+    return residuals;
+  }
+
   function blockStartsFor(n) {
     const starts = [];
     for (let s = 0; s < n; s += BLOCK) starts.push(s);
@@ -2038,6 +2910,36 @@
     return out;
   }
 
+  // ---------- Resumable rANS decoding (streaming path) ----------
+  // Deliberately separate from ransDecode above rather than refactored from it — this
+  // touches core, already-proven decode state machinery, so any bug here is isolated
+  // from the existing decode() path rather than risking a regression in it.
+  function ransDecoderInit(bytes, table) {
+    const { freq, cum } = table;
+    let pos = 0;
+    let x = bytes[pos++] << 24 | bytes[pos++] << 16 | bytes[pos++] << 8 | bytes[pos++];
+    x = x >>> 0;
+    const alphabetSize = freq.length;
+    const slot2sym = new Uint8Array(PROB_SCALE);
+    for (let s = 0; s < alphabetSize; s++) for (let j = cum[s]; j < cum[s] + freq[s]; j++) slot2sym[j] = s;
+    return { bytes, pos, x, freq, cum, slot2sym };
+  }
+  function ransDecodeSymbols(state, count) {
+    const out = new Uint8Array(count);
+    const bytes = state.bytes, slot2sym = state.slot2sym, freq = state.freq, cum = state.cum;
+    let pos = state.pos, x = state.x;
+    for (let i = 0; i < count; i++) {
+      const slot = x & (PROB_SCALE - 1);
+      const s = slot2sym[slot];
+      const f = freq[s], c = cum[s];
+      x = f * (x >>> PROB_BITS) + slot - c;
+      while (x < RANS_L) { x = (x * 256) + bytes[pos++]; }
+      out[i] = s;
+    }
+    state.pos = pos; state.x = x;
+    return out;
+  }
+
   // ---------- Container format ----------
   // MAGIC(4) VER(1) sampleRate(4) numChannels(1) bitsPerSample(1) numFrames(4)
   // metaLen(4) metaBytes(metaLen, UTF-8 JSON)
@@ -2079,6 +2981,7 @@
     let totalPredicted = 0, totalRans = 0, totalExtra = 0;
     const lmsModes = [];
     const channelBlocks = [];
+    const channelByteLengths = []; // total bytes each channel's [header+lpc+rans+extra] occupies — needed to compute the index table below
 
     for (let c = 0; c < crossed.length; c++) {
       const { residuals, orders, lpcParams } = predictChannelForward(crossed[c]);
@@ -2111,6 +3014,7 @@
       cdv.setUint32(cp, extraBytes.length, true); cp += 4;
 
       channelBlocks.push(new Uint8Array(chHeader), lpcBytes, ransBytes, extraBytes);
+      channelByteLengths.push(chHeader.byteLength + lpcBytes.length + ransBytes.length + extraBytes.length);
       totalPredicted += residuals.length;
       totalRans += ransBytes.length;
       totalExtra += extraBytes.length;
@@ -2118,11 +3022,17 @@
 
     // Phase 2: now write the main header (mode bytes + cross-channel flags are known) and assemble.
     const parts = [];
-    const header = new ArrayBuffer(4 + 1 + 4 + 1 + 1 + 4 + 4 + 1 + 4 + 1 + crossFlagBytes.length + wav.numChannels);
+    const indexTableSize = wav.numChannels * 4; // 4 bytes per channel: absolute file offset of that channel's header
+    const header = new ArrayBuffer(4 + 1 + 4 + 1 + 1 + 4 + 4 + 1 + 4 + 1 + crossFlagBytes.length + wav.numChannels + indexTableSize);
     const hdv = new DataView(header);
     let p = 0;
     hdv.setUint32(p, MAGIC, false); p += 4;
-    hdv.setUint8(p, 7); p += 1; // version 7: adaptive (cost-checked) cross-channel lifting + adaptive per-channel LMS mode — never regresses vs. skipping either stage
+    hdv.setUint8(p, 8); p += 1; // version 8: adds a per-channel byte-offset index table right after the
+    // main header, so a network-aware decoder can locate ANY channel's header with one
+    // targeted fetch instead of having to download everything before it (channels are
+    // stored fully sequentially in the file, so without this index, reaching channel 7's
+    // header requires having already fetched channels 0-6's ENTIRE content — discovered
+    // via testing, not assumed; see the network streaming decoder for how this gets used).
     hdv.setUint32(p, wav.sampleRate, true); p += 4;
     hdv.setUint8(p, wav.numChannels); p += 1;
     hdv.setUint8(p, wav.bitsPerSample); p += 1;
@@ -2133,6 +3043,14 @@
     hdv.setUint8(p, crossFlagBytes.length); p += 1;
     for (let i = 0; i < crossFlagBytes.length; i++) { hdv.setUint8(p, crossFlagBytes[i]); p += 1; }
     for (let i = 0; i < lmsModes.length; i++) { hdv.setUint8(p, lmsModes[i]); p += 1; }
+    // Index table: now that the full header size (including this table itself) and
+    // metadata/artwork sizes are known, compute each channel's absolute file offset.
+    const channelDataStart = header.byteLength + metaBytes.length + mimeBytes.length + picBytes.length;
+    let channelCursor = channelDataStart;
+    for (let c = 0; c < wav.numChannels; c++) {
+      hdv.setUint32(p, channelCursor, true); p += 4;
+      channelCursor += channelByteLengths[c];
+    }
     parts.push(new Uint8Array(header), metaBytes, mimeBytes, picBytes);
     for (const block of channelBlocks) parts.push(block);
 
@@ -2171,6 +3089,7 @@
       p += crossFlagByteLen;
       p += numChannels; // lmsModes, one byte each — not needed here, just skip past them
     }
+    if (version >= 8) { p += numChannels * 4; } // per-channel byte-offset index table — not needed here, just skip past it
     const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
     const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
     let picture = null;
@@ -2211,6 +3130,7 @@
       lmsModes = [];
       for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
     }
+    if (version >= 8) { p += numChannels * 4; } // per-channel byte-offset index table — not used on this read path, just skip past it
     // Header (including the embedded cross-channel flags / LMS modes) is now fully consumed —
     // only now do we pull the actual meta/artwork content, matching the order encode wrote it in.
     const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
@@ -2265,7 +3185,521 @@
     return { sampleRate, numChannels, bitsPerSample, numFrames, channels, metadata };
   }
 
-  const NovaCodec = { parseWav, writeWav, encode, decode, readMetadata };
+  // ---------- Streaming decoder (progressive decode-and-play) ----------
+  // Parses the header once (duplicated from decode() rather than shared with it, so a
+  // bug here can't touch the already-proven one-shot path), then exposes
+  // decodeNextChunk(numBlocks) which can be called repeatedly to get successive PCM
+  // chunks — each call advances every channel's rANS/BitReader/LMS/predictor state by
+  // exactly that many blocks, using only the resumable primitives verified above.
+  function createStreamingDecoder(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    const magic = dv.getUint32(p, false); p += 4;
+    if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+    const version = dv.getUint8(p); p += 1;
+    const sampleRate = dv.getUint32(p, true); p += 4;
+    const numChannels = dv.getUint8(p); p += 1;
+    const bitsPerSample = dv.getUint8(p); p += 1;
+    const numFrames = dv.getUint32(p, true); p += 4;
+    const metaLen = dv.getUint32(p, true); p += 4;
+    let mimeLen = 0, picLen = 0;
+    if (version >= 2) {
+      mimeLen = dv.getUint8(p); p += 1;
+      picLen = dv.getUint32(p, true); p += 4;
+    }
+    let crossFlags = [];
+    let lmsModes = new Array(numChannels).fill(0);
+    if (version >= 7) {
+      const crossFlagByteLen = dv.getUint8(p); p += 1;
+      const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+      crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+      lmsModes = [];
+      for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+    }
+    if (version >= 8) { p += numChannels * 4; } // per-channel byte-offset index table — not used on this read path, just skip past it
+    const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+    const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+    let picture = null;
+    if (mimeLen > 0) {
+      const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+      const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+      picture = { mime, data };
+    }
+    const metadata = { tags, picture };
+
+    const blockStarts = blockStartsFor(numFrames);
+    const numBlocksTotal = blockStarts.length;
+
+    // Per-channel setup: parse each channel's header/content exactly like decode() does,
+    // but instead of fully decoding, set up resumable state for each stage.
+    const channelState = [];
+    for (let c = 0; c < numChannels; c++) {
+      const numBlocks = dv.getUint32(p, true); p += 4;
+      const orders = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { orders[i] = dv.getUint8(p); p += 1; }
+      const riceKs = new Uint8Array(numBlocks);
+      for (let i = 0; i < numBlocks; i++) { riceKs[i] = dv.getUint8(p); p += 1; }
+      const lpcBytesLen = dv.getUint32(p, true); p += 4;
+      const alphabetSize = dv.getUint8(p); p += 1;
+      const freq = new Uint32Array(alphabetSize);
+      for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+      const cum = new Uint32Array(alphabetSize + 1);
+      for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+      const ransLen = dv.getUint32(p, true); p += 4;
+      const extraLen = dv.getUint32(p, true); p += 4;
+      const lpcBytes = bytes.subarray(p, p + lpcBytesLen); p += lpcBytesLen;
+      const ransBytes = bytes.subarray(p, p + ransLen); p += ransLen;
+      const extraBytes = bytes.subarray(p, p + extraLen); p += extraLen;
+
+      const lpcDv = new DataView(lpcBytes.buffer, lpcBytes.byteOffset, lpcBytes.byteLength);
+      const lpcParams = [];
+      let lp = 0;
+      while (lp < lpcBytes.length) {
+        const shift = lpcDv.getUint8(lp); lp += 1;
+        const qcoeffs = new Int32Array(LPC_ORDER);
+        for (let j = 0; j < LPC_ORDER; j++) { qcoeffs[j] = lpcDv.getInt16(lp, true); lp += 2; }
+        lpcParams.push({ shift, qcoeffs });
+      }
+
+      channelState.push({
+        orders, riceKs, lpcParams,
+        ransState: ransDecoderInit(ransBytes, { freq, cum }),
+        extraBitReader: new BitReader(extraBytes),
+        lmsMode: lmsModes[c],
+        lmsState: lmsCascadeInverseChunkInit(lmsModes[c]),
+        lpcState: predictChannelInverseChunkInit(),
+        x: new Int32Array(numFrames), // persistent, filled in progressively across chunk calls
+        nextBlockIdx: 0,
+      });
+    }
+
+    let nextBlockIdx = 0; // shared across channels — every channel advances in lockstep
+
+    function decodeNextChunk(numBlocksPerChunk) {
+      if (nextBlockIdx >= numBlocksTotal) return null; // already fully decoded
+      const startBlockIdx = nextBlockIdx;
+      const endBlockIdx = Math.min(startBlockIdx + numBlocksPerChunk, numBlocksTotal);
+      const rangeStart = blockStarts[startBlockIdx];
+      const rangeEnd = endBlockIdx < numBlocksTotal ? blockStarts[endBlockIdx] : numFrames;
+
+      const crossedChunks = [];
+      for (let c = 0; c < numChannels; c++) {
+        const cs = channelState[c];
+        const riceKsChunk = cs.riceKs.slice(startBlockIdx, endBlockIdx);
+        const ordersChunk = cs.orders.slice(startBlockIdx, endBlockIdx);
+        const refinedChunk = riceJoinChannelChunk(cs.ransState, riceKsChunk, blockStarts, startBlockIdx, endBlockIdx, cs.extraBitReader, numFrames);
+        const residualsChunk = lmsCascadeInverseChunk(refinedChunk, cs.lmsMode, cs.lmsState);
+        predictChannelInverseChunk(residualsChunk, ordersChunk, cs.lpcParams, cs.lpcState, cs.x, rangeStart);
+        crossedChunks.push(cs.x.subarray(rangeStart, rangeEnd));
+      }
+
+      const decodedChunk = crossChannelInverse(crossedChunks, crossFlags);
+      nextBlockIdx = endBlockIdx;
+      return { channels: decodedChunk, startSample: rangeStart, endSample: rangeEnd, done: nextBlockIdx >= numBlocksTotal };
+    }
+
+    return {
+      sampleRate, numChannels, bitsPerSample, numFrames, metadata,
+      decodeNextChunk,
+      isDone: () => nextBlockIdx >= numBlocksTotal,
+    };
+  }
+
+  // ---------- Header-only structure parse (for progressive network fetch) ----------
+  // Reads the main header, metadata/artwork, and every channel's SMALL per-block header
+  // arrays (orders, riceKs, LPC params) and length fields — WITHOUT requiring the large
+  // rANS/extra CONTENT bytes to be present. Computes each channel's exact byte offset
+  // within the full file, so the caller can fetch just the portion of just the channels
+  // actually needed for the next chunk, rather than the whole file upfront.
+  //
+  // If `bytes` doesn't extend far enough to complete this parse (e.g. artwork pushed the
+  // channel headers further into the file than what's been fetched so far), returns
+  // { needMoreBytes: true } instead of throwing, so the caller can fetch more and retry —
+  // parsing this header structure is cheap, re-running it from scratch on a larger buffer
+  // is not a meaningful cost.
+  function parseFileStructure(bytes) {
+    try {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let p = 0;
+      function need(n) { if (p + n > bytes.length) throw { needMoreBytes: true }; }
+      need(4); const magic = dv.getUint32(p, false); p += 4;
+      if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+      need(1); const version = dv.getUint8(p); p += 1;
+      need(4); const sampleRate = dv.getUint32(p, true); p += 4;
+      need(1); const numChannels = dv.getUint8(p); p += 1;
+      need(1); const bitsPerSample = dv.getUint8(p); p += 1;
+      need(4); const numFrames = dv.getUint32(p, true); p += 4;
+      need(4); const metaLen = dv.getUint32(p, true); p += 4;
+      let mimeLen = 0, picLen = 0;
+      if (version >= 2) {
+        need(1); mimeLen = dv.getUint8(p); p += 1;
+        need(4); picLen = dv.getUint32(p, true); p += 4;
+      }
+      let crossFlags = [];
+      let lmsModes = new Array(numChannels).fill(0);
+      if (version >= 7) {
+        need(1); const crossFlagByteLen = dv.getUint8(p); p += 1;
+        need(crossFlagByteLen); const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+        crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+        lmsModes = [];
+        need(numChannels);
+        for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+      }
+      let channelHeaderOffsets = null;
+      if (version >= 8) {
+        need(numChannels * 4);
+        channelHeaderOffsets = [];
+        for (let i = 0; i < numChannels; i++) { channelHeaderOffsets.push(dv.getUint32(p, true)); p += 4; }
+      }
+      need(metaLen); const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+      const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+      let picture = null;
+      if (mimeLen > 0) {
+        need(mimeLen); const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+        need(picLen); const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+        picture = { mime, data };
+      }
+      const metadata = { tags, picture };
+      const blockStarts = blockStartsFor(numFrames);
+
+      const channels = [];
+      for (let c = 0; c < numChannels; c++) {
+        need(4); const numBlocks = dv.getUint32(p, true); p += 4;
+        need(numBlocks); const orders = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+        need(numBlocks); const riceKs = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+        need(4); const lpcBytesLen = dv.getUint32(p, true); p += 4;
+        need(1); const alphabetSize = dv.getUint8(p); p += 1;
+        need(alphabetSize * 2);
+        const freq = new Uint32Array(alphabetSize);
+        for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+        const cum = new Uint32Array(alphabetSize + 1);
+        for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+        need(4); const ransLen = dv.getUint32(p, true); p += 4;
+        need(4); const extraLen = dv.getUint32(p, true); p += 4;
+        // Content offsets computed here — content itself is NOT required to be present
+        // in `bytes` for this parse to succeed; only the header fields above are.
+        const lpcBytesOffset = p; p += lpcBytesLen;
+        const ransBytesOffset = p; p += ransLen;
+        const extraBytesOffset = p; p += extraLen;
+        channels.push({
+          numBlocks, orders, riceKs, alphabetSize, freq, cum,
+          lpcBytesOffset, lpcBytesLen, ransBytesOffset, ransLen, extraBytesOffset, extraLen,
+        });
+      }
+
+      return {
+        sampleRate, numChannels, bitsPerSample, numFrames, metadata,
+        crossFlags, lmsModes, blockStarts, channels,
+        channelHeaderOffsets, hasIndex: channelHeaderOffsets !== null,
+        headerEndOffset: p, // NOT "where channel 0's content starts" despite what an earlier
+        // version of this comment claimed — by this point p has walked through EVERY
+        // channel's header AND content, so this is actually close to end-of-file. Use
+        // channelHeaderOffsets (when hasIndex is true) for the useful per-channel offsets.
+      };
+    } catch (e) {
+      if (e && e.needMoreBytes) return { needMoreBytes: true };
+      throw e;
+    }
+  }
+
+  // ---------- Header-only structure parse (for progressive network fetch) ----------
+  // parseFileStructure (above, in the OLDER v7-oriented design) walks every channel
+  // sequentially, which — as testing revealed — requires having fetched nearly the whole
+  // file to reach the LAST channel's header, since channels are stored fully sequentially.
+  // For v8+ files (which carry a channel offset index), this lighter function reads ONLY
+  // the main header/metadata/index — never attempting the sequential per-channel walk —
+  // so it stays small and fast regardless of file size.
+  function parseMainHeaderAndIndex(bytes) {
+    try {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let p = 0;
+      function need(n) { if (p + n > bytes.length) throw { needMoreBytes: true }; }
+      need(4); const magic = dv.getUint32(p, false); p += 4;
+      if (magic !== MAGIC) throw new Error('Bad magic / not a NOVA file');
+      need(1); const version = dv.getUint8(p); p += 1;
+      need(4); const sampleRate = dv.getUint32(p, true); p += 4;
+      need(1); const numChannels = dv.getUint8(p); p += 1;
+      need(1); const bitsPerSample = dv.getUint8(p); p += 1;
+      need(4); const numFrames = dv.getUint32(p, true); p += 4;
+      need(4); const metaLen = dv.getUint32(p, true); p += 4;
+      let mimeLen = 0, picLen = 0;
+      if (version >= 2) {
+        need(1); mimeLen = dv.getUint8(p); p += 1;
+        need(4); picLen = dv.getUint32(p, true); p += 4;
+      }
+      let crossFlags = [];
+      let lmsModes = new Array(numChannels).fill(0);
+      if (version >= 7) {
+        need(1); const crossFlagByteLen = dv.getUint8(p); p += 1;
+        need(crossFlagByteLen); const crossFlagBytes = bytes.subarray(p, p + crossFlagByteLen); p += crossFlagByteLen;
+        crossFlags = unpackBits(crossFlagBytes, Math.max(0, numChannels - 1));
+        lmsModes = [];
+        need(numChannels);
+        for (let i = 0; i < numChannels; i++) { lmsModes.push(dv.getUint8(p)); p += 1; }
+      }
+      let channelHeaderOffsets = null;
+      if (version >= 8) {
+        need(numChannels * 4);
+        channelHeaderOffsets = [];
+        for (let i = 0; i < numChannels; i++) { channelHeaderOffsets.push(dv.getUint32(p, true)); p += 4; }
+      }
+      need(metaLen); const metaBytes = bytes.subarray(p, p + metaLen); p += metaLen;
+      const tags = metaLen > 0 ? JSON.parse(new TextDecoder().decode(metaBytes)) : {};
+      let picture = null;
+      if (mimeLen > 0) {
+        need(mimeLen); const mime = new TextDecoder('latin1').decode(bytes.subarray(p, p + mimeLen)); p += mimeLen;
+        need(picLen); const data = bytes.subarray(p, p + picLen).slice(); p += picLen;
+        picture = { mime, data };
+      }
+      const metadata = { tags, picture };
+      return {
+        version, sampleRate, numChannels, bitsPerSample, numFrames, metadata,
+        crossFlags, lmsModes, blockStarts: blockStartsFor(numFrames),
+        channelHeaderOffsets, hasIndex: channelHeaderOffsets !== null,
+        channel0HeaderOffsetIfNoIndex: p, // only meaningful when hasIndex is false
+      };
+    } catch (e) {
+      if (e && e.needMoreBytes) return { needMoreBytes: true };
+      throw e;
+    }
+  }
+
+  // Parses ONE channel's header fields starting at `localOffset` within `bytes` —
+  // independently of any other channel. Offsets in the returned object are LOCAL to
+  // `bytes` (relative to its start); the caller adds the channel's own absolute file
+  // offset to get real file positions.
+  function parseChannelHeaderAt(bytes, localOffset) {
+    try {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let p = localOffset;
+      function need(n) { if (p + n > bytes.length) throw { needMoreBytes: true }; }
+      need(4); const numBlocks = dv.getUint32(p, true); p += 4;
+      need(numBlocks); const orders = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+      need(numBlocks); const riceKs = bytes.subarray(p, p + numBlocks).slice(); p += numBlocks;
+      need(4); const lpcBytesLen = dv.getUint32(p, true); p += 4;
+      need(1); const alphabetSize = dv.getUint8(p); p += 1;
+      need(alphabetSize * 2);
+      const freq = new Uint32Array(alphabetSize);
+      for (let s = 0; s < alphabetSize; s++) { freq[s] = dv.getUint16(p, true); p += 2; }
+      const cum = new Uint32Array(alphabetSize + 1);
+      for (let s = 0; s < alphabetSize; s++) cum[s + 1] = cum[s] + freq[s];
+      need(4); const ransLen = dv.getUint32(p, true); p += 4;
+      need(4); const extraLen = dv.getUint32(p, true); p += 4;
+      const lpcBytesOffset = p;
+      const ransBytesOffset = p + lpcBytesLen;
+      const extraBytesOffset = ransBytesOffset + ransLen;
+      return { numBlocks, orders, riceKs, alphabetSize, freq, cum, lpcBytesOffset, lpcBytesLen, ransBytesOffset, ransLen, extraBytesOffset, extraLen };
+    } catch (e) {
+      if (e && e.needMoreBytes) return { needMoreBytes: true };
+      throw e;
+    }
+  }
+
+  // ---------- Network-aware streaming decoder ----------
+  // v8+ files (with the index table): fetch each channel's header independently and IN
+  // PARALLEL using its known absolute offset, then fetch a generous per-channel head
+  // start (also in parallel) — no channel depends on any other channel's data at all.
+  // Pre-v8 files (no index): falls back to fetching the whole file and using the older
+  // sequential parser — matches original, already-working behavior, just without the
+  // speed win, since there's genuinely no way to locate later channels without it.
+  async function createNetworkStreamingDecoder(fetchRangeAsync, opts) {
+    opts = opts || {};
+    const PROBE_SIZE = opts.probeSize || 512 * 1024;
+    const CHANNEL_HEADER_PROBE = opts.channelHeaderProbe || 16 * 1024;
+    // Asymmetric, not one shared size: real data (both actual tracks and synthetic
+    // testing) shows the "extra bits" stream running several times larger than the
+    // rANS-coded stream, so a single shared head-start size either starves rANS or wastes
+    // bandwidth over-fetching it. Sized to comfortably clear the FIRST chunk's threshold
+    // (defined below) with margin for a few more chunks — not the whole track; refills
+    // that happen once playback has already started aren't a problem to avoid.
+    const RANS_HEAD_START = opts.ransHeadStart || 250 * 1024;
+    const EXTRA_HEAD_START = opts.extraHeadStart || 1000 * 1024;
+    const REFILL_SIZE = opts.refillSize || 800 * 1024;
+
+    let probeBytes = await fetchRangeAsync(0, PROBE_SIZE - 1);
+    let main = parseMainHeaderAndIndex(probeBytes);
+    while (main.needMoreBytes) {
+      const more = await fetchRangeAsync(probeBytes.length, probeBytes.length + PROBE_SIZE - 1);
+      if (more.length === 0) throw new Error('Could not parse NOVA header — file may be corrupt or truncated');
+      const combined = new Uint8Array(probeBytes.length + more.length);
+      combined.set(probeBytes, 0); combined.set(more, probeBytes.length);
+      probeBytes = combined;
+      main = parseMainHeaderAndIndex(probeBytes);
+    }
+
+    let channelHeaders;
+
+    if (main.hasIndex) {
+      const headerFetches = main.channelHeaderOffsets.map(async (absOffset) => {
+        if (probeBytes.length > absOffset) {
+          const already = parseChannelHeaderAt(probeBytes, absOffset);
+          if (!already.needMoreBytes) return already;
+        }
+        let extended = await fetchRangeAsync(absOffset, absOffset + CHANNEL_HEADER_PROBE - 1);
+        let parsed = parseChannelHeaderAt(extended, 0);
+        while (parsed.needMoreBytes) {
+          const more = await fetchRangeAsync(absOffset + extended.length, absOffset + extended.length + CHANNEL_HEADER_PROBE - 1);
+          if (more.length === 0) throw new Error('Could not parse channel header — file may be corrupt or truncated');
+          const combined = new Uint8Array(extended.length + more.length);
+          combined.set(extended, 0); combined.set(more, extended.length);
+          extended = combined;
+          parsed = parseChannelHeaderAt(extended, 0);
+        }
+        // Convert offsets from "local to this channel's own probe" to absolute file offsets.
+        return {
+          ...parsed,
+          lpcBytesOffset: absOffset + parsed.lpcBytesOffset,
+          ransBytesOffset: absOffset + parsed.ransBytesOffset,
+          extraBytesOffset: absOffset + parsed.extraBytesOffset,
+        };
+      });
+      channelHeaders = await Promise.all(headerFetches);
+    } else {
+      let fullBytes = probeBytes;
+      let structure = parseFileStructure(fullBytes);
+      while (structure.needMoreBytes) {
+        const more = await fetchRangeAsync(fullBytes.length, fullBytes.length + PROBE_SIZE * 4 - 1);
+        if (more.length === 0) throw new Error('Could not parse NOVA file structure');
+        const combined = new Uint8Array(fullBytes.length + more.length);
+        combined.set(fullBytes, 0); combined.set(more, fullBytes.length);
+        fullBytes = combined;
+        structure = parseFileStructure(fullBytes);
+      }
+      channelHeaders = structure.channels;
+      probeBytes = fullBytes; // pre-v8 fallback effectively already has (most of) the file
+    }
+
+    // Per-channel buffer state, seeded with whatever the probe/header-fetch already covered.
+    const chanBuf = channelHeaders.map((ch) => {
+      function seed(offset, len) {
+        const availableFromProbe = Math.max(0, Math.min(len, probeBytes.length - offset));
+        return {
+          buf: availableFromProbe > 0 ? probeBytes.slice(offset, offset + availableFromProbe) : new Uint8Array(0),
+          fetchedUpTo: offset + availableFromProbe,
+        };
+      }
+      return { rans: seed(ch.ransBytesOffset, ch.ransLen), extra: seed(ch.extraBytesOffset, ch.extraLen) };
+    });
+
+    const headStartFetches = [];
+    for (let c = 0; c < main.numChannels; c++) {
+      const ch = channelHeaders[c], cb = chanBuf[c];
+      const ransTarget = Math.min(ch.ransBytesOffset + ch.ransLen, ch.ransBytesOffset + RANS_HEAD_START);
+      if (cb.rans.fetchedUpTo < ransTarget) {
+        headStartFetches.push(fetchRangeAsync(cb.rans.fetchedUpTo, ransTarget - 1).then(bytes => {
+          const merged = new Uint8Array(cb.rans.buf.length + bytes.length);
+          merged.set(cb.rans.buf, 0); merged.set(bytes, cb.rans.buf.length);
+          cb.rans.buf = merged; cb.rans.fetchedUpTo = ransTarget;
+        }));
+      }
+      const extraTarget = Math.min(ch.extraBytesOffset + ch.extraLen, ch.extraBytesOffset + EXTRA_HEAD_START);
+      if (cb.extra.fetchedUpTo < extraTarget) {
+        headStartFetches.push(fetchRangeAsync(cb.extra.fetchedUpTo, extraTarget - 1).then(bytes => {
+          const merged = new Uint8Array(cb.extra.buf.length + bytes.length);
+          merged.set(cb.extra.buf, 0); merged.set(bytes, cb.extra.buf.length);
+          cb.extra.buf = merged; cb.extra.fetchedUpTo = extraTarget;
+        }));
+      }
+    }
+    await Promise.all(headStartFetches);
+
+    async function ensureLpcParsed(c) {
+      const ch = channelHeaders[c];
+      if (ch.lpcBytesLen === 0) return []; // nothing to fetch — this channel used only fixed predictors, no LPC blocks at all
+      let lpcBytes = probeBytes.length >= ch.lpcBytesOffset + ch.lpcBytesLen
+        ? probeBytes.slice(ch.lpcBytesOffset, ch.lpcBytesOffset + ch.lpcBytesLen)
+        : await fetchRangeAsync(ch.lpcBytesOffset, ch.lpcBytesOffset + ch.lpcBytesLen - 1);
+      const lpcDv = new DataView(lpcBytes.buffer, lpcBytes.byteOffset, lpcBytes.byteLength);
+      const lpcParams = [];
+      let lp = 0;
+      while (lp < lpcBytes.length) {
+        const shift = lpcDv.getUint8(lp); lp += 1;
+        const qcoeffs = new Int32Array(LPC_ORDER);
+        for (let j = 0; j < LPC_ORDER; j++) { qcoeffs[j] = lpcDv.getInt16(lp, true); lp += 2; }
+        lpcParams.push({ shift, qcoeffs });
+      }
+      return lpcParams;
+    }
+
+    const channelState = new Array(main.numChannels);
+    for (let c = 0; c < main.numChannels; c++) {
+      const ch = channelHeaders[c];
+      channelState[c] = {
+        orders: ch.orders, riceKs: ch.riceKs,
+        lpcParams: await ensureLpcParsed(c),
+        ransState: ransDecoderInit(chanBuf[c].rans.buf, { freq: ch.freq, cum: ch.cum }),
+        extraBitReader: new BitReader(chanBuf[c].extra.buf),
+        lmsMode: main.lmsModes[c],
+        lmsState: lmsCascadeInverseChunkInit(main.lmsModes[c]),
+        lpcState: predictChannelInverseChunkInit(),
+        x: new Int32Array(main.numFrames),
+      };
+    }
+
+    async function ensureBuffered(c, ransAheadBytes, extraAheadBytes) {
+      const ch = channelHeaders[c], cb = chanBuf[c], cs = channelState[c];
+      if (cb.rans.fetchedUpTo < ch.ransBytesOffset + ch.ransLen && cb.rans.buf.length - cs.ransState.pos < ransAheadBytes) {
+        const target = Math.min(ch.ransBytesOffset + ch.ransLen, cb.rans.fetchedUpTo + REFILL_SIZE);
+        const more = await fetchRangeAsync(cb.rans.fetchedUpTo, target - 1);
+        const merged = new Uint8Array(cb.rans.buf.length + more.length);
+        merged.set(cb.rans.buf, 0); merged.set(more, cb.rans.buf.length);
+        cs.ransState.bytes = merged; cb.rans.buf = merged; cb.rans.fetchedUpTo = target;
+      }
+      if (cb.extra.fetchedUpTo < ch.extraBytesOffset + ch.extraLen && cb.extra.buf.length - cs.extraBitReader.pos < extraAheadBytes) {
+        const target = Math.min(ch.extraBytesOffset + ch.extraLen, cb.extra.fetchedUpTo + REFILL_SIZE);
+        const more = await fetchRangeAsync(cb.extra.fetchedUpTo, target - 1);
+        const merged = new Uint8Array(cb.extra.buf.length + more.length);
+        merged.set(cb.extra.buf, 0); merged.set(more, cb.extra.buf.length);
+        cs.extraBitReader.bytes = merged; cb.extra.buf = merged; cb.extra.fetchedUpTo = target;
+      }
+    }
+
+    let nextBlockIdx = 0;
+    const numBlocksTotal = main.blockStarts.length;
+
+    async function decodeNextChunk(numBlocksPerChunk) {
+      if (nextBlockIdx >= numBlocksTotal) return null;
+      const startBlockIdx = nextBlockIdx;
+      const endBlockIdx = Math.min(startBlockIdx + numBlocksPerChunk, numBlocksTotal);
+      const rangeStart = main.blockStarts[startBlockIdx];
+      const rangeEnd = endBlockIdx < numBlocksTotal ? main.blockStarts[endBlockIdx] : main.numFrames;
+      const chunkSamples = rangeEnd - rangeStart;
+      // Separate, realistically-sized thresholds per stream — measured real data (both
+      // real tracks and synthetic testing) shows the "extra bits" stream running several
+      // times larger than the rANS-coded stream, so one shared threshold badly over-
+      // triggers refills on the smaller stream. Still deliberately conservative (worst
+      // case, not typical case) — an oversized estimate only costs a bit of extra latency
+      // via ensureBuffered, never correctness.
+      const ransAheadBytes = chunkSamples * 2;   // ~4x realistic worst-case rANS rate
+      const extraAheadBytes = chunkSamples * 8;  // ~4x realistic worst-case extra-bits rate
+
+      const crossedChunks = [];
+      for (let c = 0; c < main.numChannels; c++) {
+        await ensureBuffered(c, ransAheadBytes, extraAheadBytes);
+        const cs = channelState[c];
+        const riceKsChunk = cs.riceKs.slice(startBlockIdx, endBlockIdx);
+        const ordersChunk = cs.orders.slice(startBlockIdx, endBlockIdx);
+        const refinedChunk = riceJoinChannelChunk(cs.ransState, riceKsChunk, main.blockStarts, startBlockIdx, endBlockIdx, cs.extraBitReader, main.numFrames);
+        const residualsChunk = lmsCascadeInverseChunk(refinedChunk, cs.lmsMode, cs.lmsState);
+        predictChannelInverseChunk(residualsChunk, ordersChunk, cs.lpcParams, cs.lpcState, cs.x, rangeStart);
+        crossedChunks.push(cs.x.subarray(rangeStart, rangeEnd));
+      }
+
+      const decodedChunk = crossChannelInverse(crossedChunks, main.crossFlags);
+      nextBlockIdx = endBlockIdx;
+      return { channels: decodedChunk, startSample: rangeStart, endSample: rangeEnd, done: nextBlockIdx >= numBlocksTotal };
+    }
+
+    return {
+      sampleRate: main.sampleRate, numChannels: main.numChannels,
+      bitsPerSample: main.bitsPerSample, numFrames: main.numFrames, metadata: main.metadata,
+      usedIndexedFastPath: main.hasIndex,
+      decodeNextChunk,
+      isDone: () => nextBlockIdx >= numBlocksTotal,
+    };
+  }
+
+  const NovaCodec = { parseWav, writeWav, encode, decode, readMetadata, createStreamingDecoder, parseFileStructure, createNetworkStreamingDecoder };
   if (typeof module !== 'undefined' && module.exports) module.exports = NovaCodec;
   else root.NovaCodec = NovaCodec;
 
@@ -2397,66 +3831,108 @@
     }
   }
 
-  // ---------- Decode worker: keeps NovaCodec.decode() off the main thread ----------
-  // decode() is synchronous and takes 10-30s+ on real files. Running it on the main
-  // thread would freeze the UI during playback start AND during any background
-  // prefetch — defeating the point of prefetching. One persistent worker, reused for
-  // every decode request (current track and prefetches alike), processes them in order.
+  // Progressive decode-and-play: a Worker decodes chunk-by-chunk (createStreamingDecoder —
+  // local files' bytes are already fully available via File.arrayBuffer(), so no network-
+  // aware chunked fetching needed here), posting each chunk back as it's ready instead of
+  // only after the whole file finishes. Playback starts on the first chunk; the rest fills
+  // in the same AudioBuffer in the background.
   let decodeWorker = null;
   let decodeRequestSeq = 0;
-  const pendingDecodeRequests = new Map(); // requestId -> {resolve, reject}
+  const pendingStreamRequests = new Map();
+  const STREAM_CHUNK_BLOCKS = 30; // ~2.5s of audio per chunk at 48kHz
 
   function getDecodeWorker() {
     if (decodeWorker) return decodeWorker;
     const codecSource = document.getElementById('codecSource').textContent;
     const workerSource = codecSource + `
       self.onmessage = function (e) {
-        const { requestId, bytes } = e.data;
+        const { requestId, bytes, blocksPerChunk } = e.data;
         try {
-          const decoded = NovaCodec.decode(bytes);
-          const transfer = decoded.channels.map(ch => ch.buffer);
-          self.postMessage({ requestId, ok: true, decoded: {
-            sampleRate: decoded.sampleRate, numChannels: decoded.numChannels,
-            bitsPerSample: decoded.bitsPerSample, numFrames: decoded.numFrames,
-            channels: decoded.channels,
-          } }, transfer);
+          const streamer = NovaCodec.createStreamingDecoder(bytes);
+          self.postMessage({
+            requestId, type: 'header',
+            sampleRate: streamer.sampleRate, numChannels: streamer.numChannels,
+            bitsPerSample: streamer.bitsPerSample, numFrames: streamer.numFrames,
+            metadata: streamer.metadata,
+          });
+          while (!streamer.isDone()) {
+            const result = streamer.decodeNextChunk(blocksPerChunk);
+            if (!result) break;
+            // result.channels are views into the streamer's persistent, still-growing
+            // per-channel arrays — .slice() before transfer is required for correctness,
+            // not just performance: transferring a view's buffer directly would hand over
+            // the WHOLE backing array, corrupting subsequent chunks.
+            const channelsCopy = result.channels.map(ch => ch.slice());
+            self.postMessage({
+              requestId, type: 'chunk',
+              startSample: result.startSample, endSample: result.endSample, done: result.done,
+              channels: channelsCopy,
+            }, channelsCopy.map(c => c.buffer));
+          }
         } catch (err) {
-          self.postMessage({ requestId, ok: false, error: err.message });
+          self.postMessage({ requestId, type: 'error', error: err.message });
         }
       };
     `;
     const blob = new Blob([workerSource], { type: 'application/javascript' });
     decodeWorker = new Worker(URL.createObjectURL(blob));
     decodeWorker.onmessage = (e) => {
-      const { requestId, ok, decoded, error } = e.data;
-      const pending = pendingDecodeRequests.get(requestId);
-      if (!pending) return; // stale/unknown — ignore
-      pendingDecodeRequests.delete(requestId);
-      if (ok) pending.resolve(decoded); else pending.reject(new Error(error));
+      const { requestId, type } = e.data;
+      const pending = pendingStreamRequests.get(requestId);
+      if (!pending) return;
+      if (type === 'header') pending.onHeader(e.data);
+      else if (type === 'chunk') { pending.onChunk(e.data); if (e.data.done) pendingStreamRequests.delete(requestId); }
+      else if (type === 'error') { pending.onError(e.data.error); pendingStreamRequests.delete(requestId); }
     };
     decodeWorker.onerror = (e) => console.error('Decode worker error:', e);
     return decodeWorker;
   }
 
-  function decodeInWorker(bytes) {
+  // onHeader fires synchronously within the worker's message dispatch — no await/
+  // microtask gap — so the caller can safely create the AudioBuffer there with a hard
+  // guarantee it's ready before the first onChunk fires. Resolves once fully decoded.
+  function decodeStreamingInWorker(bytes, blocksPerChunk, onHeader, onChunk) {
     const worker = getDecodeWorker();
     const requestId = ++decodeRequestSeq;
-    return new Promise((resolve, reject) => {
-      pendingDecodeRequests.set(requestId, { resolve, reject });
-      worker.postMessage({ requestId, bytes }, [bytes.buffer]); // transfer, not copy
+    let resolveDone, rejectDone;
+    const donePromise = new Promise((res, rej) => { resolveDone = res; rejectDone = rej; });
+    pendingStreamRequests.set(requestId, {
+      onHeader,
+      onChunk: (c) => { onChunk(c); if (c.done) resolveDone(); },
+      onError: (err) => rejectDone(new Error(err)),
     });
+    worker.postMessage({ requestId, bytes, blocksPerChunk }, [bytes.buffer]);
+    return donePromise;
   }
 
-  function buildAudioBuffer(decoded) {
-    const ctx = ensureCtx();
-    const ab = ctx.createBuffer(decoded.numChannels, decoded.numFrames, decoded.sampleRate);
-    const maxVal = Math.pow(2, decoded.bitsPerSample - 1);
-    for (let c = 0; c < decoded.numChannels; c++) {
-      const out = ab.getChannelData(c);
-      const src = decoded.channels[c];
-      for (let i = 0; i < decoded.numFrames; i++) out[i] = src[i] / maxVal;
-    }
-    return ab;
+  // decodedUpToSample tracks how far background decode has reached for the CURRENTLY
+  // playing track — seekTo() below uses this to detect a seek into not-yet-decoded
+  // territory (the codec's LMS/rANS state is sequential, so that can't be instant).
+  let decodedUpToSample = 0;
+
+  function getDecodedBufferStreaming(bytes, onReadyToPlay) {
+    return (async () => {
+      let audioBuffer = null, maxVal = null, calledReady = false;
+      decodedUpToSample = 0;
+      await decodeStreamingInWorker(
+        bytes, STREAM_CHUNK_BLOCKS,
+        (h) => {
+          const ctx = ensureCtx();
+          audioBuffer = ctx.createBuffer(h.numChannels, h.numFrames, h.sampleRate);
+          maxVal = Math.pow(2, h.bitsPerSample - 1);
+        },
+        (chunk) => {
+          for (let c = 0; c < chunk.channels.length; c++) {
+            const dst = audioBuffer.getChannelData(c);
+            const src = chunk.channels[c];
+            for (let i = 0; i < src.length; i++) dst[chunk.startSample + i] = src[i] / maxVal;
+          }
+          decodedUpToSample = chunk.endSample;
+          if (!calledReady) { calledReady = true; onReadyToPlay(audioBuffer); }
+        }
+      );
+      return audioBuffer;
+    })();
   }
 
   // ---------- Bounded decode cache ----------
@@ -2470,14 +3946,13 @@
     for (const id of decodeCache.keys()) if (!keepIds.includes(id)) decodeCache.delete(id);
   }
 
-  async function getDecodedBuffer(track) {
+  async function getDecodedBufferFull(track) {
     if (decodeCache.has(track.id)) return decodeCache.get(track.id);
     if (inFlightDecodes.has(track.id)) return inFlightDecodes.get(track.id);
     const p = (async () => {
       const file = await track.fileHandle.getFile();
       const buf = new Uint8Array(await file.arrayBuffer());
-      const decoded = await decodeInWorker(buf);
-      const ab = buildAudioBuffer(decoded);
+      const ab = await getDecodedBufferStreaming(buf, () => {}); // prefetch doesn't need first-chunk-ready; just wait for the whole thing
       decodeCache.set(track.id, ab);
       return ab;
     })();
@@ -2491,7 +3966,7 @@
     const track = trackById(nextId);
     if (!track) return;
     if (decodeCache.has(nextId) || inFlightDecodes.has(nextId)) return;
-    getDecodedBuffer(track).then(() => {
+    getDecodedBufferFull(track).then(() => {
       pruneCache([queue[queuePos], queue[queuePos + 1]].filter(Boolean));
     }).catch(err => console.warn('Prefetch failed for', track.name, err));
   }
@@ -2532,6 +4007,10 @@
 
   function startFrom(offset) {
     const ctx = ensureCtx();
+    // Browsers can suspend an AudioContext during backgrounding — often at exactly the
+    // moment between one track ending and the next starting, since there's briefly no
+    // active source. Resuming defensively before every start is cheap insurance.
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     stopSource();
     const src = ctx.createBufferSource();
     src.buffer = currentBuffer;
@@ -2545,6 +4024,10 @@
     isPlaying = true;
     updateTransportUI();
     tickProgress();
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'playing';
+      try { navigator.mediaSession.setPositionState({ duration: currentBuffer.duration, playbackRate: 1, position: offset }); } catch (e) {}
+    }
   }
 
   function pausePlayback() {
@@ -2553,6 +4036,7 @@
     stopSource();
     isPlaying = false;
     updateTransportUI();
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
   }
 
   function resumePlayback() {
@@ -2560,13 +4044,42 @@
     startFrom(playOffset);
   }
 
+  // Seeking ahead of what's been decoded so far can't be instant: the codec's LMS/rANS
+  // state is inherently sequential — there's no way to jump to an arbitrary point without
+  // having decoded everything before it first. Seeking backward, or forward within what's
+  // already decoded, is instant either way. Seeking further ahead shows clear feedback and
+  // starts playback automatically once background decode reaches that point.
+  let seekWaitToken = 0;
   function seekTo(offset) {
     if (!currentBuffer) return;
+    seekWaitToken++;
     const wasPlaying = isPlaying;
     stopSource();
     playOffset = Math.max(0, Math.min(currentBuffer.duration, offset));
+    const targetSample = Math.floor(playOffset * currentBuffer.sampleRate);
+    if (targetSample > decodedUpToSample) {
+      isPlaying = false;
+      updateTransportUI();
+      waitForDecodeAndPlay(targetSample, playOffset);
+      return;
+    }
     if (wasPlaying) startFrom(playOffset);
     else updateTransportUI();
+  }
+  function waitForDecodeAndPlay(targetSample, offsetSeconds) {
+    const myToken = seekWaitToken;
+    const track = trackById(queue[queuePos]);
+    if (track) setNowPlaying(track, 'Catching up to your seek position…');
+    const check = () => {
+      if (myToken !== seekWaitToken || !currentBuffer) return;
+      if (decodedUpToSample >= targetSample) {
+        if (track) setNowPlaying(track, 'Playing — buffering rest');
+        startFrom(offsetSeconds);
+        return;
+      }
+      setTimeout(check, 150);
+    };
+    check();
   }
 
   function onTrackEnded() {
@@ -2597,19 +4110,40 @@
     stopSource();
     isPlaying = false;
     currentBuffer = null;
+    seekWaitToken++; // invalidate any pending "waiting to catch up" from a seek on the previous track
     const cached = decodeCache.has(id);
-    setNowPlaying(track, cached ? 'Ready' : 'Decoding…');
     $('playPauseBtn').disabled = true;
-    try {
-      const t0 = performance.now();
-      const ab = await getDecodedBuffer(track);
-      const t1 = performance.now();
-      currentBuffer = ab;
+
+    if (cached) {
+      currentBuffer = decodeCache.get(id);
       $('playPauseBtn').disabled = false;
-      setNowPlaying(track, cached ? 'Ready (prefetched)' : `Decoded in ${((t1 - t0) / 1000).toFixed(1)}s`);
-      $('timeTotal').textContent = fmtTime(ab.duration);
+      setNowPlaying(track, 'Ready (prefetched)');
+      $('timeTotal').textContent = fmtTime(currentBuffer.duration);
       startFrom(0);
       renderQueue();
+      pruneCache([queue[queuePos], queue[queuePos + 1]].filter(Boolean));
+      prefetchNext();
+      return;
+    }
+
+    setNowPlaying(track, 'Starting…');
+    const t0 = performance.now();
+    try {
+      const file = await track.fileHandle.getFile();
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const fullBuffer = await getDecodedBufferStreaming(buf, (partialBuffer) => {
+        // First chunk ready — start playing NOW; the rest keeps decoding in the
+        // background and fills in the SAME buffer object as it goes.
+        currentBuffer = partialBuffer;
+        $('playPauseBtn').disabled = false;
+        const startedIn = ((performance.now() - t0) / 1000).toFixed(1);
+        setNowPlaying(track, `Playing — buffering rest (started in ${startedIn}s)`);
+        $('timeTotal').textContent = fmtTime(partialBuffer.duration);
+        startFrom(0);
+        renderQueue();
+      });
+      decodeCache.set(id, fullBuffer);
+      setNowPlaying(track, 'Ready');
       pruneCache([queue[queuePos], queue[queuePos + 1]].filter(Boolean));
       prefetchNext();
     } catch (err) {
@@ -2640,6 +4174,27 @@
     const art = artworkUrlFor(track);
     $('npArt').style.backgroundImage = art ? `url(${art})` : 'none';
     $('npStatus').textContent = statusText || '';
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.tags.title || track.name,
+        artist: track.tags.artist || '',
+        album: track.tags.album || '',
+        artwork: art ? [{ src: art, sizes: '512x512', type: (track.picture && track.picture.mime) || 'image/jpeg' }] : [],
+      });
+    }
+  }
+  function setupMediaSessionHandlers() {
+    if (!('mediaSession' in navigator)) return;
+    const handlers = {
+      play: () => resumePlayback(),
+      pause: () => pausePlayback(),
+      previoustrack: () => playPrevInQueue(),
+      nexttrack: () => playNextInQueue(),
+      seekto: (details) => { if (details.seekTime !== undefined && currentBuffer) seekTo(details.seekTime); },
+    };
+    for (const [action, handler] of Object.entries(handlers)) {
+      try { navigator.mediaSession.setActionHandler(action, handler); } catch (e) {}
+    }
   }
 
   function updateTransportUI() {
@@ -2869,6 +4424,7 @@
 
   window.addEventListener('DOMContentLoaded', () => {
     wireEvents();
+    setupMediaSessionHandlers();
     renderPlaylists();
     renderLibrary();
     renderQueue();
