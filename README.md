@@ -11,6 +11,7 @@ The world need something better for once instead of keeping the same old outdate
 Albums in Test file:
 - Bach — Goldberg Variations — Nicholas Angelich
 - Vivaldi — The Four Seasons — London Philharmonic / Itzhak Perlman
+<br>
 Takes a while to Decode but when you have a playlist its gapless :q
 <br>
 Made sure to use non copyrighted audio btw.
