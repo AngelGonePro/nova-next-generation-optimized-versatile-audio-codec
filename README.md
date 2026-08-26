@@ -17,6 +17,8 @@ NOVA achieves approximately 2.23:1 lossless compression on a 7.1, 24-bit, 48 kHz
 NOVA currently approaches or exceeds APE-level compression in my initial tests. On the tested 7.1 material, NOVA produced a smaller file than APE. On the tested stereo material, APE's maximum compression setting produced the smallest file, with NOVA only ~0.2 MB larger while remaining smaller than FLAC. All NOVA results were bit-perfect.
 <br>
 Initial testing shows NOVA achieving compression competitive with Monkey's Audio (APE). APE currently produces smaller files on the tested stereo material, while NOVA has produced a smaller file than APE on the tested 7.1 material and smaller files than FLAC on some stereo material. All NOVA tests shown have passed bit-exact lossless verification.
+<br>
+"Preliminary testing suggests NOVA may have particularly strong compression characteristics with multichannel audio. On a 6:32 24-bit/48 kHz Hotel California 7.1 track, NOVA produced a 193.6 MB file compared with 200.6 MB for Monkey's Audio and 261.4 MB for FLAC, while passing bit-exact verification."
 
 ---
 
