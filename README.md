@@ -95,32 +95,13 @@ Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html DISC
 > "Extra High" produced smaller files than "Insane" in the tested
 > material, so Extra High is used for the comparisons shown here.
 
-## Preliminary Observations
+| Test                    | APE Extra High |     FLAC 8 |           NOVA | NOVA placement |
+| ----------------------- | -------------: | ---------: | -------------: | -------------- |
+| Hotel California Stereo |      76,771 KB |  78,276 KB |      79,138 KB | 3rd            |
+| Hotel California 7.1    |     200,583 KB | 261,354 KB | **193,629 KB** | **🥇 1st**     |
+| Chemical 8ch 24-bit     |      84,147 KB |  85,542 KB |  **82,002 KB** | **🥇 1st**     |
+| Unforgettable Stereo    |      44,097 KB |  45,327 KB |      44,822 KB | 🥈 2nd         |
 
-These results are experimental and do not represent NOVA's final
-compression performance.
-
-- NOVA has successfully produced bit-exact lossless reconstructions
-  for all tested files.
-- On the tested 7.1 Hotel California material, NOVA produced a smaller
-  file than both APE and FLAC.
-- On the tested stereo material, NOVA is competitive with APE and FLAC,
-  but does not consistently beat them.
-- NOVA shows substantially different compression behavior depending on
-  the source material and bit depth.
-- A particularly significant difference was observed when testing the
-  same Chemical multichannel material at 32-bit and 24-bit depth.
-- The 32-bit Chemical test produced a 173.44 MB NOVA file from
-  273.66 MB of raw PCM (63.4%).
-- The 24-bit Chemical test produced an 80.08 MB NOVA file from
-  200.27 MB of raw PCM (40.0%).
-- In the 32-bit test, the raw extra-bits payload was 167.30 MB,
-  compared with only 63.79 MB in the 24-bit test.
-- This suggests that the current NOVA implementation may have a
-  significant inefficiency in its 32-bit sample/residual handling.
-- Further investigation is required to determine whether the cause is
-  predictor precision, residual representation, extra-bit handling,
-  entropy coding, or another aspect of the 32-bit encoding path.
 
 ## Known Investigation: 32-bit PCM Compression
 
