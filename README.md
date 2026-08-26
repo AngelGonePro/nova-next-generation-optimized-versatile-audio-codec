@@ -8,6 +8,9 @@ The world need something better for once instead of keeping the same old outdate
 `player.html` is a player for this custom codec!
 
 ## Test it for yourself:
+Albums in Test file:
+- Bach — Goldberg Variations — Nicholas Angelich
+- Vivaldi — The Four Seasons — London Philharmonic / Itzhak Perlman
 Takes a while to Decode but when you have a playlist its gapless :q
 <br>
 Made sure to use non copyrighted audio btw.
