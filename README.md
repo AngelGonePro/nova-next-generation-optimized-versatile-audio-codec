@@ -82,7 +82,7 @@ compression performance.
   predictor precision, residual representation, extra-bit handling,
   entropy coding, or another aspect of the 32-bit encoding path.
 
-  ## Known Investigation: 32-bit PCM Compression
+## Known Investigation: 32-bit PCM Compression
 
 Preliminary testing indicates that NOVA's current implementation
 compresses 32-bit PCM significantly less efficiently than equivalent
