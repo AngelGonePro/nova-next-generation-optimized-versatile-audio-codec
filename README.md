@@ -9,10 +9,15 @@ The world need something better for once instead of keeping the same old outdate
 
 ## Test it for yourself:
 Takes a while to Decode but when you have a playlist its gapless :q
+<br>
 Made sure to use non copyrighted audio btw.
+<br>
 user: Guest
+<br>
 Pass: GuestAccount
+<br>
 NextCloud Link: https://cdntest.cosmoscraft.net/index.php/s/nfSGQJTLfgj8ArB
+<br>
 https://music.cosmoscraft.net/web.html
 
 ## NOVA is an experimental lossless audio codec designed to achieve better compression than existing lossless codecs while preserving bit-perfect audio and metadata.
