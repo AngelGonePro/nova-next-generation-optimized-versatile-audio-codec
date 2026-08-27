@@ -465,32 +465,6 @@ compression shown in these tests.
 10. The difference strongly suggests that NOVA's current compression
     architecture may be particularly effective on multichannel audio.
 
-11. More testing is required before claiming that NOVA is universally
-    better than FLAC or APE.
-
-12. Future testing should include:
-      - Stereo
-      - 5.1
-      - 7.1
-      - Genuine discrete multichannel recordings
-      - Dolby Atmos beds
-      - 16-bit
-      - 24-bit
-      - 32-bit
-      - 44.1 kHz
-      - 48 kHz
-      - 96 kHz
-      - 192 kHz
-      - Classical
-      - Rock
-      - Pop
-      - Hip-hop
-      - Electronic
-      - Jazz
-      - Acoustic
-      - Highly correlated channels
-      - Highly independent channels
-
 ---
 
 # PROJECT STATUS
