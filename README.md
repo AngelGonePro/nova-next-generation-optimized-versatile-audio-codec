@@ -89,41 +89,56 @@ Chemical 8ch             39.5%     ~41.7%     ~42.4%
 # VISUAL:
 
 ## Hotel California — Stereo
+
+```
 NOVA  70.8%
 APE  ~71.2%
 FLAC ~72.7%
 
+```
 ## Unforgettable — Stereo
+
+```
 NOVA  68.9%
 APE  ~69.5%
 FLAC ~71.4%
+```
 
 ## Hotel California — 7.1
+
+```
 NOVA  43.9%
 APE  ~46.6%
 FLAC ~60.6%
+```
 
 ## Is There Someone Else? — 7.1
+
+```
 NOVA  44.2%
 APE  ~48.1%
 FLAC ~61.8%
+```
 
 ## Chemical — 8ch
+
+```
 NOVA  39.5%
 APE  ~41.7%
 FLAC ~42.4%
+```
 
 ---
 
 # WINNER GRAPH
 
-
+```
 Hotel California — Stereo       APE  > NOVA > FLAC
 Unforgettable — Stereo          APE  > NOVA > FLAC
 Hotel California — 7.1          NOVA > APE  > FLAC
 Is There Someone Else? — 7.1   NOVA > APE  > FLAC
 Chemical — 8ch / 24-bit         NOVA > APE  > FLAC
-
+```
 
 # CURRENT SCORE
 
@@ -358,6 +373,7 @@ NOVA > APE > FLAC
 
 A separate Chemical test used the original 32-bit / 48 kHz / 8-channel WAV.
 
+```
 Duration:             3:06
 Channels:             8
 Bit Depth:            32-bit
@@ -370,17 +386,18 @@ Verification:         BIT-EXACT PASS
 rANS payload:         6.11 MB
 Raw extra-bits:       167.30 MB
 
-IMPORTANT:
-
+```
+## IMPORTANT:
+<br>
 This 32-bit result is NOT an apples-to-apples comparison with the
 APE and FLAC Chemical results.
-
+<br>
 The APE and FLAC comparison files were made from a 24-bit / 48 kHz
 FLAC converted from the original 32-bit WAV.
-
+<br>
 Therefore the 32-bit NOVA result should be treated as a separate
 technical test rather than a codec-vs-codec benchmark.
-
+<br>
 The corrected 24-bit Chemical test is the result used in the main
 comparison above.
 
@@ -419,19 +436,19 @@ MORE CPU TIME
 
 
 NOVA is LOSSLESS.
-
+<br>
 The benchmark does not judge audio quality using subjective listening
 tests.
-
+<br>
 Instead, NOVA decodes the compressed file and compares the resulting
 PCM data against the original source.
-
+<br>
 Result:
-
+<br>
 BIT-EXACT ROUND TRIP: PASS
-
+<br>
 The decoded audio is bit-for-bit identical to the source WAV.
-
+<br>
 Therefore NOVA does not sacrifice audio information to achieve the
 compression shown in these tests.
 
@@ -476,15 +493,15 @@ compression shown in these tests.
 
 
 NOVA is currently an experimental codec and benchmark project.
-
+<br>
 The current results are encouraging, especially for multichannel
 lossless audio.
-
+<br>
 The most important next step is expanding the benchmark dataset and
 profiling NOVA's prediction, channel decorrelation, residual, and
 entropy-coding stages to determine exactly why multichannel material
 currently compresses so effectively.
-
+<br>
 The goal is not merely to produce a codec that works, but to determine
 whether NOVA can become a practical, open, bit-perfect lossless audio
 format with competitive compression, reasonable decoding performance,
