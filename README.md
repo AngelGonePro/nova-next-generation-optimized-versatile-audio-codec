@@ -132,17 +132,17 @@ FLAC :                                                 0 / 5
 
 # NOVA STORAGE REDUCTION VS RAW PCM
 
-
+```
 +---------------------------+-----------+-----------+
 | Song                      | NOVA %    | Saved     |
 +---------------------------+-----------+-----------+
-| Hotel California Stereo  | 70.8%     | 29.2%     |
-| Unforgettable Stereo     | 68.9%     | 31.1%     |
-| Hotel California 7.1     | 43.9%     | 56.1%     |
-| Is There Someone Else 7.1| 44.2%     | 55.8%     |
-| Chemical 8ch             | 39.5%     | 60.5%     |
+| Hotel California Stereo   | 70.8%     | 29.2%     |
+| Unforgettable Stereo      | 68.9%     | 31.1%     |
+| Hotel California 7.1      | 43.9%     | 56.1%     |
+| Is There Someone Else 7.1 | 44.2%     | 55.8%     |
+| Chemical 8ch              | 39.5%     | 60.5%     |
 +---------------------------+-----------+-----------+
-
+```
 
 # STORAGE SAVED
 
@@ -165,16 +165,16 @@ Chemical — 8ch
 
 ---
 
-@ STEREO VS MULTICHANNEL
+# STEREO VS MULTICHANNEL
 
-
+```
 +----------------+-------+----------------------+----------------------+
 | Content        | Tests | Average NOVA Ratio   | Average Saved        |
 +----------------+-------+----------------------+----------------------+
 | Stereo         | 2     | 69.85%               | 30.15%               |
 | Multichannel   | 3     | 42.53%               | 57.47%               |
 +----------------+-------+----------------------+----------------------+
-
+```
 Average ratio:
 
 ```
