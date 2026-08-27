@@ -17,7 +17,7 @@ Pass: GuestAccount
 <br>
 NextCloud Link: https://cdntest.cosmoscraft.net/index.php/s/nfSGQJTLfgj8ArB
 <br>
-Wen Link: https://music.cosmoscraft.net/web.html
+Web Link: https://music.cosmoscraft.net/web.html
 
 <br>
 
