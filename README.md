@@ -1,128 +1,507 @@
-# NOVA - Next-generation Optimized Versatile Audio
-This codec made 7.1 audio from FLAC, WavPack 5.9.0, and APE 13.x to 100MB vs the 102MB from APE which is the best compression codec currently out.
-As of right now all ran inside of a `index.html` please note loading a `.nova` file may take a while for you to get the option to playback the file.
-This is a prototype of possibly a new lossless codec for storage conscious users.
-If anyone is willing to expand on this or wants a better lossless codec and can code feel free to take inspiration or fork it and make it better.
-The world need something better for once instead of keeping the same old outdated things.
+# NOVA — Next-generation Optimized Versatile Audio Codec
 
-## `index.html` is the encoder!
+Experimental lossless audio codec focused on efficient PCM compression, with particularly promising results on multichannel audio.
 
-`player.html` is a player for this custom codec!
+ALL NOVA TESTS BELOW PASSED BIT-EXACT VERIFICATION.
 
----
+======================================================================
+COMPRESSION COMPARISON
+======================================================================
 
-NOVA achieves approximately 2.23:1 lossless compression on a 7.1, 24-bit, 48 kHz track at 3 minutes and 18 seconds.
-"Decoded audio is bit-for-bit identical to the source WAV."
-<br>
-NOVA currently approaches or exceeds APE-level compression in my initial tests. On the tested 7.1 material, NOVA produced a smaller file than APE. On the tested stereo material, APE's maximum compression setting produced the smallest file, with NOVA only ~0.2 MB larger while remaining smaller than FLAC. All NOVA results were bit-perfect.
-<br>
-Initial testing shows NOVA achieving compression competitive with Monkey's Audio (APE). APE currently produces smaller files on the tested stereo material, while NOVA has produced a smaller file than APE on the tested 7.1 material and smaller files than FLAC on some stereo material. All NOVA tests shown have passed bit-exact lossless verification.
-<br>
-"Preliminary testing suggests NOVA may have particularly strong compression characteristics with multichannel audio. On a 6:32 24-bit/48 kHz Hotel California 7.1 track, NOVA produced a 193.6 MB file compared with 200.6 MB for Monkey's Audio and 261.4 MB for FLAC, while passing bit-exact verification."
+Codec settings:
+  NOVA = High Compression
+  FLAC = Level 8 (maximum compression)
+  APE  = Extra High
+  Source = 24-bit / 48 kHz for the main apples-to-apples tests
 
----
+APE Extra High was used because it produced a smaller file than APE
+Insane in testing.
 
-## Test it for yourself:
-Albums in Test file:
-- Bach — Goldberg Variations — Nicholas Angelich
-- Vivaldi — The Four Seasons — London Philharmonic / Itzhak Perlman
-<br>
-
-Takes a while to Decode but when you have a playlist its gapless :q
-<br>
-
-Made sure to use non copyrighted audio btw.
-<br>
-
-user: Guest
-<br>
-
-Pass: GuestAccount
-<br>
-
-NextCloud Link: https://cdntest.cosmoscraft.net/index.php/s/nfSGQJTLfgj8ArB
-<br>
-
-Website, from `nova-web-player.zip`: https://music.cosmoscraft.net/web.html DISCLAIMER: Firefox decoding is not the best and you may want an entire song to finish decoding before playback.
-
-## NOVA is an experimental lossless audio codec designed to achieve better compression than existing lossless codecs while preserving bit-perfect audio and metadata.
-## Development status: NOVA is currently an experimental proof-of-concept. The initial implementation was created with AI-assisted development and is intended primarily to demonstrate the concept. Contributions from developers experienced in audio compression, DSP, entropy coding, C/C++, Rust, SIMD, or multimedia formats are welcome.
-
-## Detailed Compression Comparison
-
-> All NOVA results shown below passed bit-exact round-trip verification.
-> APE was tested at Extra High because it produced smaller files than
-> Insane in the tested material. FLAC was tested at compression level 8.
->
-> For the Chemical comparison, the APE and FLAC files were encoded from
-> the same 24-bit / 48 kHz source used for the 24-bit NOVA test. The
-> original 32-bit WAV was converted to 24-bit / 48 kHz before FLAC/APE
-> comparison.
->
-> Therefore, the 32-bit NOVA Chemical result is shown separately as an
-> implementation/diagnostic test and is not used as a direct APE/FLAC
-> comparison.
-
-| Song / Test | Audio Type | Channels | Bit Depth | Sample Rate | Duration | Raw PCM | Codec | Compression Setting | File Size | NOVA Ratio vs PCM | Space Saved | Bit-Exact |
-|---|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---|
-| **Hotel California** | Stereo | 2 | 24-bit | 48 kHz | 6:32 | 107.74 MB | WAV | Uncompressed | 110,462 KB | 100% | 0% | — |
-| | | | | | | | **APE** | **Extra High** | **76,771 KB** | — | — | — |
-| | | | | | | | **FLAC** | **Level 8** | **78,276 KB** | — | — | — |
-| | | | | | | | **NOVA** | Current prototype | **79,138 KB** | **71.7%** | **28.3%** | **PASS** |
-| **Hotel California** | 7.1 | 8 | 24-bit | 48 kHz | 6:32 | 430.95 MB | WAV | Uncompressed | 441,428 KB | 100% | 0% | — |
-| | | | | | | | **APE** | **Extra High** | **200,583 KB** | — | — | — |
-| | | | | | | | **FLAC** | **Level 8** | **261,354 KB** | — | — | — |
-| | | | | | | | **NOVA** | Current prototype | **193,629 KB** | **43.9%** | **56.1%** | **PASS** |
-| **Chemical — Post Malone** | 8-channel / Atmos bed | 8 | **24-bit** | 48 kHz | 3:02 | 200.27 MB | WAV | Uncompressed | — | 100% | 0% | — |
-| | | | | | | | **FLAC** | **Level 8** | **85,542 KB** | — | — | — |
-| | | | | | | | **APE** | **Extra High** | **84,147 KB** | — | — | — |
-| | | | | | | | **NOVA** | Current prototype | **82,002 KB** | **40.0%** | **60.0%** | **PASS** |
-| **Unforgettable — French Montana** | Stereo | 2 | 24-bit | 48 kHz | 3:51 | 63.49 MB | WAV | Uncompressed | 65,162 KB | 100% | 0% | — |
-| | | | | | | | **APE** | **Extra High** | **44,097 KB** | — | — | — |
-| | | | | | | | **FLAC** | **Level 8** | **45,327 KB** | — | — | — |
-| | | | | | | | **NOVA** | Current prototype | **44,822 KB** | **68.9%** | **31.1%** | **PASS** |
-
-## Codec Configuration
-
-| Codec | Compression Setting | Purpose |
-|---|---|---|
-| **NOVA** | Current prototype | Experimental codec |
-| **Monkey's Audio (APE)** | **Extra High** | Smallest APE result observed in testing |
-| **FLAC** | **Level 8** | Maximum FLAC compression |
-| **WAV** | Uncompressed PCM | Source/reference |
-
-> **APE note:** APE was tested at multiple compression levels. 
-> "Extra High" produced smaller files than "Insane" in the tested
-> material, so Extra High is used for the comparisons shown here.
-
-| Test                    | APE Extra High |     FLAC 8 |           NOVA | NOVA placement |
-| ----------------------- | -------------: | ---------: | -------------: | -------------- |
-| Hotel California Stereo |      76,771 KB |  78,276 KB |      79,138 KB | 3rd            |
-| Hotel California 7.1    |     200,583 KB | 261,354 KB | **193,629 KB** | **🥇 1st**     |
-| Chemical 8ch 24-bit     |      84,147 KB |  85,542 KB |  **82,002 KB** | **🥇 1st**     |
-| Unforgettable Stereo    |      44,097 KB |  45,327 KB |      44,822 KB | 🥈 2nd         |
++---------------------------+-----+--------+-------+-------+-----------+----------+----------+-------------+-------------+
+| Song                      | Ch. | Depth  | Rate  | Time  | Raw PCM   | NOVA     | NOVA %   | APE Extra   | FLAC Level 8|
++---------------------------+-----+--------+-------+-------+-----------+----------+----------+-------------+-------------+
+| Hotel California         | 2   | 24-bit | 48kHz | 6:32  | 107.74 MB | 78,069 KB| 70.8%    | 76,771 KB   | 78,267 KB   |
+| Unforgettable            | 2   | 24-bit | 48kHz | 3:51  | 63.49 MB  | 44,822 KB| 68.9%    | 44,097 KB   | 45,327 KB   |
+| Hotel California         | 8   | 24-bit | 48kHz | 6:32  | 430.95 MB |193,629 KB| 43.9%    |200,583 KB   |261,354 KB   |
+| Is There Someone Else?  | 8   | 24-bit | 48kHz | 3:18  | 218.57 MB | 99,034 KB| 44.2%    |105,013 KB   |135,109 KB   |
+| Chemical                 | 8   | 24-bit | 48kHz | 3:02  | 200.27 MB | 81,012 KB| 39.5%    | 83,498 KB   | 84,954 KB   |
++---------------------------+-----+--------+-------+-------+-----------+----------+----------+-------------+-------------+
 
 
-## Known Investigation: 32-bit PCM Compression
+======================================================================
+FILE SIZE GRAPH — LOWER IS BETTER
+======================================================================
 
-Preliminary testing indicates that NOVA's current implementation
-compresses 32-bit PCM significantly less efficiently than equivalent
-24-bit material.
+HOTEL CALIFORNIA — STEREO
 
-This is currently under investigation.
+APE   76,771 KB |██████████████████████████████████████████████████
+NOVA  78,069 KB |███████████████████████████████████████████████████
+FLAC  78,267 KB |███████████████████████████████████████████████████
 
-Example:
 
-| Source | NOVA Ratio | Raw Extra-Bits |
-|---|---:|---:|
-| Chemical 8ch 32-bit | 63.4% | 167.30 MB |
-| Chemical 8ch 24-bit | **40.0%** | **63.79 MB** |
+UNFORGETTABLE — STEREO
 
-The 24-bit version also produces a larger rANS payload, suggesting that
-more of the signal is reaching the entropy-coding stage rather than
-being stored through the raw extra-bits path.
+APE   44,097 KB |████████████████████████████
+NOVA  44,822 KB |█████████████████████████████
+FLAC  45,327 KB |█████████████████████████████
 
-This may represent a significant optimization opportunity.
+
+HOTEL CALIFORNIA — 7.1
+
+NOVA 193,629 KB |████████████████████████████████████████████████
+APE  200,583 KB |██████████████████████████████████████████████████
+FLAC 261,354 KB |██████████████████████████████████████████████████████████████
+
+
+IS THERE SOMEONE ELSE? — 7.1
+
+NOVA  99,034 KB |████████████████████████
+APE  105,013 KB |██████████████████████████
+FLAC 135,109 KB |████████████████████████████████
+
+
+CHEMICAL — 8 CHANNEL / 24-BIT
+
+NOVA  81,012 KB |████████████████████
+APE   83,498 KB |█████████████████████
+FLAC  84,954 KB |██████████████████████
+
+
+======================================================================
+COMPRESSION RATIO GRAPH — LOWER IS BETTER
+======================================================================
+
+                         NOVA       APE        FLAC
+Hotel California 2ch     70.8%     ~71.2%     ~72.7%
+Unforgettable 2ch        68.9%     ~69.5%     ~71.4%
+Hotel California 7.1     43.9%     ~46.6%     ~60.6%
+Is There Someone Else    44.2%     ~48.1%     ~61.8%
+Chemical 8ch             39.5%     ~41.7%     ~42.4%
+
+
+VISUAL:
+
+Hotel California — Stereo
+NOVA  70.8% |████████████████████████████████████████████████████████████████████████
+APE  ~71.2% |█████████████████████████████████████████████████████████████████████████
+FLAC ~72.7% |██████████████████████████████████████████████████████████████████████████
+
+Unforgettable — Stereo
+NOVA  68.9% |█████████████████████████████████████████████████████████████████████
+APE  ~69.5% |██████████████████████████████████████████████████████████████████████
+FLAC ~71.4% |████████████████████████████████████████████████████████████████████████
+
+Hotel California — 7.1
+NOVA  43.9% |████████████████████████████████████████████
+APE  ~46.6% |███████████████████████████████████████████████
+FLAC ~60.6% |████████████████████████████████████████████████████████████
+
+Is There Someone Else? — 7.1
+NOVA  44.2% |████████████████████████████████████████████
+APE  ~48.1% |████████████████████████████████████████████████
+FLAC ~61.8% |██████████████████████████████████████████████████████████████
+
+Chemical — 8ch
+NOVA  39.5% |████████████████████████████████████████
+APE  ~41.7% |██████████████████████████████████████████
+FLAC ~42.4% |███████████████████████████████████████████
+
+
+======================================================================
+WINNER GRAPH
+======================================================================
+
+Hotel California — Stereo       APE  > NOVA > FLAC
+Unforgettable — Stereo          APE  > NOVA > FLAC
+Hotel California — 7.1          NOVA > APE  > FLAC
+Is There Someone Else? — 7.1   NOVA > APE  > FLAC
+Chemical — 8ch / 24-bit         NOVA > APE  > FLAC
+
+
+CURRENT SCORE
+
+NOVA : ██████████████████████████████████████████████  3 / 5
+APE  : ██████████████████████████████                  2 / 5
+FLAC :                                                     0 / 5
+
+
+======================================================================
+NOVA STORAGE REDUCTION VS RAW PCM
+======================================================================
+
++---------------------------+-----------+-----------+
+| Song                      | NOVA %    | Saved     |
++---------------------------+-----------+-----------+
+| Hotel California Stereo  | 70.8%     | 29.2%     |
+| Unforgettable Stereo     | 68.9%     | 31.1%     |
+| Hotel California 7.1     | 43.9%     | 56.1%     |
+| Is There Someone Else 7.1| 44.2%     | 55.8%     |
+| Chemical 8ch             | 39.5%     | 60.5%     |
++---------------------------+-----------+-----------+
+
+
+STORAGE SAVED
+
+Hotel California — Stereo
+29.2% |█████████████████████████████
+
+Unforgettable — Stereo
+31.1% |███████████████████████████████
+
+Hotel California — 7.1
+56.1% |████████████████████████████████████████████████████
+
+Is There Someone Else? — 7.1
+55.8% |███████████████████████████████████████████████████
+
+Chemical — 8ch
+60.5% |████████████████████████████████████████████████████████
+
+
+======================================================================
+STEREO VS MULTICHANNEL
+======================================================================
+
++----------------+-------+----------------------+----------------------+
+| Content        | Tests | Average NOVA Ratio   | Average Saved        |
++----------------+-------+----------------------+----------------------+
+| Stereo         | 2     | 69.85%               | 30.15%               |
+| Multichannel   | 3     | 42.53%               | 57.47%               |
++----------------+-------+----------------------+----------------------+
+
+Average ratio:
+
+STEREO
+69.85% |██████████████████████████████████████████████████████████████████████
+
+MULTICHANNEL
+42.53% |██████████████████████████████████████████
+
+
+======================================================================
+DETAILED TEST DATA
+======================================================================
+
+HOTEL CALIFORNIA — EAGLES — STEREO
+
+Artist:       Eagles
+Album:        Hotel California (2013 Remaster)
+Track:        Hotel California
+Genre:        Rock
+Channels:     2
+Bit Depth:    24-bit
+Sample Rate:  48 kHz
+Duration:     6:32
+
+Raw PCM:      107.74 MB
+NOVA:         78,069 KB
+NOVA Ratio:   70.8%
+APE:          76,771 KB
+FLAC:         78,267 KB
+Verification: BIT-EXACT PASS
+
+NOVA vs APE:
+NOVA is 1,298 KB larger.
+
+NOVA vs FLAC:
+NOVA is 198 KB smaller.
+
+Result:
+APE > NOVA > FLAC
+
+
+UNFORGETTABLE — FRENCH MONTANA — STEREO
+
+Artist:       French Montana
+Album:        Jungle Rules
+Track:        Unforgettable
+Genre:        Hip-Hop / Dancehall
+Channels:     2
+Bit Depth:    24-bit
+Sample Rate:  48 kHz
+Duration:     3:51
+
+Raw PCM:      63.49 MB
+NOVA:         44,822 KB
+NOVA Ratio:   68.9%
+APE:          44,097 KB
+FLAC:         45,327 KB
+Verification: BIT-EXACT PASS
+
+NOVA vs APE:
+NOVA is 725 KB larger.
+
+NOVA vs FLAC:
+NOVA is 505 KB smaller.
+
+Result:
+APE > NOVA > FLAC
+
+
+HOTEL CALIFORNIA — EAGLES — 7.1
+
+Artist:       Eagles
+Album:        Hotel California (2013 Remaster)
+Track:        Hotel California
+Channels:     8
+Layout:       7.1
+Bit Depth:    24-bit
+Sample Rate:  48 kHz
+Duration:     6:32
+
+Raw PCM:      430.95 MB
+NOVA:         193,629 KB
+NOVA Ratio:   43.9%
+APE:          200,583 KB
+FLAC:         261,354 KB
+Verification: BIT-EXACT PASS
+
+NOVA rANS payload:
+27.54 MB
+
+NOVA raw extra-bits payload:
+161.02 MB
+
+NOVA vs APE:
+NOVA is 6,954 KB smaller.
+
+NOVA vs FLAC:
+NOVA is 67,725 KB smaller.
+
+Result:
+NOVA > APE > FLAC
+
+
+IS THERE SOMEONE ELSE? — THE WEEKND — 7.1
+
+Artist:       The Weeknd
+Album:        Dawn FM
+Track:        Is There Someone Else?
+Genre:        Synth-pop / Synthwave / Contemporary R&B
+Channels:     8
+Layout:       7.1
+Bit Depth:    24-bit
+Sample Rate:  48 kHz
+Duration:     3:18
+
+Raw PCM:      218.57 MB
+NOVA:         99,034 KB
+NOVA Ratio:   44.2%
+APE:          105,013 KB
+FLAC:         135,109 KB
+Verification: BIT-EXACT PASS
+
+NOVA rANS payload:
+13.88 MB
+
+NOVA raw extra-bits payload:
+82.53 MB
+
+NOVA vs APE:
+NOVA is 5,979 KB smaller.
+
+NOVA vs FLAC:
+NOVA is 36,075 KB smaller.
+
+Result:
+NOVA > APE > FLAC
+
+
+CHEMICAL — POST MALONE — 8 CHANNEL / 24-BIT
+
+Artist:       Post Malone
+Track:        Chemical
+Channels:     8
+Bit Depth:    24-bit
+Sample Rate:  48 kHz
+Duration:     3:02
+
+Raw PCM:      200.27 MB
+NOVA:         81,012 KB
+NOVA Ratio:   39.5%
+APE:          83,498 KB
+FLAC:         84,954 KB
+Verification: BIT-EXACT PASS
+
+NOVA rANS payload:
+15.66 MB
+
+NOVA raw extra-bits payload:
+63.14 MB
+
+NOVA vs APE:
+NOVA is 2,486 KB smaller.
+
+NOVA vs FLAC:
+NOVA is 3,942 KB smaller.
+
+Result:
+NOVA > APE > FLAC
+
+
+======================================================================
+CHEMICAL — PREVIOUS 32-BIT TEST
+======================================================================
+
+A separate Chemical test used the original 32-bit / 48 kHz / 8-channel WAV.
+
+Duration:             3:06
+Channels:             8
+Bit Depth:            32-bit
+Sample Rate:          48 kHz
+Raw PCM:              273.66 MB
+NOVA:                 173.44 MB
+NOVA Ratio:           63.4%
+Storage Saved:        36.6%
+Verification:         BIT-EXACT PASS
+rANS payload:         6.11 MB
+Raw extra-bits:       167.30 MB
+
+IMPORTANT:
+
+This 32-bit result is NOT an apples-to-apples comparison with the
+APE and FLAC Chemical results.
+
+The APE and FLAC comparison files were made from a 24-bit / 48 kHz
+FLAC converted from the original 32-bit WAV.
+
+Therefore the 32-bit NOVA result should be treated as a separate
+technical test rather than a codec-vs-codec benchmark.
+
+The corrected 24-bit Chemical test is the result used in the main
+comparison above.
+
+
+======================================================================
+HIGH COMPRESSION MODE
+======================================================================
+
+High Compression is intended primarily for archival storage.
+
+Compared with the previous NOVA compression mode:
+
+Stereo:
+  Approximately 2% smaller
+  Approximately 5× slower encode/decode
+
+Multichannel:
+  Approximately 1–1.5% smaller
+  Approximately 3.5× slower encode/decode
+
+The browser implementation currently decodes JavaScript on a single
+thread, so High Compression may cause stuttering or dropouts during
+real-time browser playback on slower systems.
+
+The trade-off is intentional:
+
+MORE COMPRESSION
+        ↓
+SMALLER ARCHIVAL FILES
+        ↓
+MORE CPU TIME
+
+
+======================================================================
+BIT-PERFECT LOSSLESS VERIFICATION
+======================================================================
+
+NOVA is LOSSLESS.
+
+The benchmark does not judge audio quality using subjective listening
+tests.
+
+Instead, NOVA decodes the compressed file and compares the resulting
+PCM data against the original source.
+
+Result:
+
+BIT-EXACT ROUND TRIP: PASS
+
+The decoded audio is bit-for-bit identical to the source WAV.
+
+Therefore NOVA does not sacrifice audio information to achieve the
+compression shown in these tests.
+
+
+======================================================================
+CURRENT FINDINGS
+======================================================================
+
+1. NOVA currently wins 3 of the 5 tested comparisons.
+
+2. NOVA wins all 3 tested multichannel comparisons.
+
+3. APE Extra High wins both tested stereo comparisons.
+
+4. NOVA is smaller than FLAC Level 8 in all 5 current tests.
+
+5. The stereo tests place NOVA relatively close to APE.
+
+6. The multichannel tests show a substantially larger NOVA advantage.
+
+7. The current best result is Chemical at 8 channels / 24-bit:
+      NOVA = 81,012 KB
+      APE  = 83,498 KB
+      FLAC = 84,954 KB
+      NOVA ratio = 39.5%
+      Storage saved = 60.5%
+
+8. The current multichannel average is:
+      NOVA ratio = 42.53%
+      Storage saved = 57.47%
+
+9. The current stereo average is:
+      NOVA ratio = 69.85%
+      Storage saved = 30.15%
+
+10. The difference strongly suggests that NOVA's current compression
+    architecture may be particularly effective on multichannel audio.
+
+11. More testing is required before claiming that NOVA is universally
+    better than FLAC or APE.
+
+12. Future testing should include:
+      - Stereo
+      - 5.1
+      - 7.1
+      - Genuine discrete multichannel recordings
+      - Dolby Atmos beds
+      - 16-bit
+      - 24-bit
+      - 32-bit
+      - 44.1 kHz
+      - 48 kHz
+      - 96 kHz
+      - 192 kHz
+      - Classical
+      - Rock
+      - Pop
+      - Hip-hop
+      - Electronic
+      - Jazz
+      - Acoustic
+      - Highly correlated channels
+      - Highly independent channels
+
+
+======================================================================
+PROJECT STATUS
+======================================================================
+
+NOVA is currently an experimental codec and benchmark project.
+
+The current results are encouraging, especially for multichannel
+lossless audio.
+
+The most important next step is expanding the benchmark dataset and
+profiling NOVA's prediction, channel decorrelation, residual, and
+entropy-coding stages to determine exactly why multichannel material
+currently compresses so effectively.
+
+The goal is not merely to produce a codec that works, but to determine
+whether NOVA can become a practical, open, bit-perfect lossless audio
+format with competitive compression, reasonable decoding performance,
+metadata support, and broad playback compatibility.
 
 ## Images:
 
