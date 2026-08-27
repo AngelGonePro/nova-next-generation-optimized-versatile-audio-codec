@@ -4,9 +4,8 @@ Experimental lossless audio codec focused on efficient PCM compression, with par
 
 ALL NOVA TESTS BELOW PASSED BIT-EXACT VERIFICATION.
 
-======================================================================
-COMPRESSION COMPARISON
-======================================================================
+
+## COMPRESSION COMPARISON
 
 Codec settings:
   NOVA = High Compression
@@ -27,89 +26,90 @@ Insane in testing.
 | Chemical                 | 8   | 24-bit | 48kHz | 3:02  | 200.27 MB | 81,012 KB| 39.5%    | 83,498 KB   | 84,954 KB   |
 +---------------------------+-----+--------+-------+-------+-----------+----------+----------+-------------+-------------+
 
+---
 
-======================================================================
-FILE SIZE GRAPH — LOWER IS BETTER
-======================================================================
-
-HOTEL CALIFORNIA — STEREO
-
-APE   76,771 KB |██████████████████████████████████████████████████
-NOVA  78,069 KB |███████████████████████████████████████████████████
-FLAC  78,267 KB |███████████████████████████████████████████████████
+# FILE SIZE GRAPH — LOWER IS BETTER
 
 
-UNFORGETTABLE — STEREO
+## HOTEL CALIFORNIA — STEREO
 
-APE   44,097 KB |████████████████████████████
-NOVA  44,822 KB |█████████████████████████████
-FLAC  45,327 KB |█████████████████████████████
-
-
-HOTEL CALIFORNIA — 7.1
-
-NOVA 193,629 KB |████████████████████████████████████████████████
-APE  200,583 KB |██████████████████████████████████████████████████
-FLAC 261,354 KB |██████████████████████████████████████████████████████████████
+APE   76,771 KB
+NOVA  78,069 KB
+FLAC  78,267 KB
 
 
-IS THERE SOMEONE ELSE? — 7.1
+## UNFORGETTABLE — STEREO
 
-NOVA  99,034 KB |████████████████████████
-APE  105,013 KB |██████████████████████████
-FLAC 135,109 KB |████████████████████████████████
-
-
-CHEMICAL — 8 CHANNEL / 24-BIT
-
-NOVA  81,012 KB |████████████████████
-APE   83,498 KB |█████████████████████
-FLAC  84,954 KB |██████████████████████
+APE   44,097 KB
+NOVA  44,822 KB
+FLAC  45,327 KB
 
 
-======================================================================
-COMPRESSION RATIO GRAPH — LOWER IS BETTER
-======================================================================
+## HOTEL CALIFORNIA — 7.1
 
+NOVA 193,629 KB
+APE  200,583 KB
+FLAC 261,354 KB
+
+
+## IS THERE SOMEONE ELSE? — 7.1
+
+NOVA  99,034 KB
+APE  105,013 KB
+FLAC 135,109 KB
+
+
+## CHEMICAL — 8 CHANNEL / 24-BIT
+
+NOVA  81,012 KB
+APE   83,498 KB
+FLAC  84,954 KB
+
+
+---
+
+# COMPRESSION RATIO GRAPH — LOWER IS BETTER
+
+```
                          NOVA       APE        FLAC
 Hotel California 2ch     70.8%     ~71.2%     ~72.7%
 Unforgettable 2ch        68.9%     ~69.5%     ~71.4%
 Hotel California 7.1     43.9%     ~46.6%     ~60.6%
 Is There Someone Else    44.2%     ~48.1%     ~61.8%
 Chemical 8ch             39.5%     ~41.7%     ~42.4%
+```
 
+# VISUAL:
 
-VISUAL:
+## Hotel California — Stereo
+NOVA  70.8%
+APE  ~71.2%
+FLAC ~72.7%
 
-Hotel California — Stereo
-NOVA  70.8% |████████████████████████████████████████████████████████████████████████
-APE  ~71.2% |█████████████████████████████████████████████████████████████████████████
-FLAC ~72.7% |██████████████████████████████████████████████████████████████████████████
+## Unforgettable — Stereo
+NOVA  68.9%
+APE  ~69.5%
+FLAC ~71.4%
 
-Unforgettable — Stereo
-NOVA  68.9% |█████████████████████████████████████████████████████████████████████
-APE  ~69.5% |██████████████████████████████████████████████████████████████████████
-FLAC ~71.4% |████████████████████████████████████████████████████████████████████████
+## Hotel California — 7.1
+NOVA  43.9%
+APE  ~46.6%
+FLAC ~60.6%
 
-Hotel California — 7.1
-NOVA  43.9% |████████████████████████████████████████████
-APE  ~46.6% |███████████████████████████████████████████████
-FLAC ~60.6% |████████████████████████████████████████████████████████████
+## Is There Someone Else? — 7.1
+NOVA  44.2%
+APE  ~48.1%
+FLAC ~61.8%
 
-Is There Someone Else? — 7.1
-NOVA  44.2% |████████████████████████████████████████████
-APE  ~48.1% |████████████████████████████████████████████████
-FLAC ~61.8% |██████████████████████████████████████████████████████████████
+## Chemical — 8ch
+NOVA  39.5%
+APE  ~41.7%
+FLAC ~42.4%
 
-Chemical — 8ch
-NOVA  39.5% |████████████████████████████████████████
-APE  ~41.7% |██████████████████████████████████████████
-FLAC ~42.4% |███████████████████████████████████████████
+---
 
+# WINNER GRAPH
 
-======================================================================
-WINNER GRAPH
-======================================================================
 
 Hotel California — Stereo       APE  > NOVA > FLAC
 Unforgettable — Stereo          APE  > NOVA > FLAC
@@ -118,16 +118,18 @@ Is There Someone Else? — 7.1   NOVA > APE  > FLAC
 Chemical — 8ch / 24-bit         NOVA > APE  > FLAC
 
 
-CURRENT SCORE
+# CURRENT SCORE
 
+```
 NOVA : ██████████████████████████████████████████████  3 / 5
 APE  : ██████████████████████████████                  2 / 5
-FLAC :                                                     0 / 5
+FLAC :                                                 0 / 5
+```
 
+---
 
-======================================================================
-NOVA STORAGE REDUCTION VS RAW PCM
-======================================================================
+# NOVA STORAGE REDUCTION VS RAW PCM
+
 
 +---------------------------+-----------+-----------+
 | Song                      | NOVA %    | Saved     |
@@ -140,8 +142,9 @@ NOVA STORAGE REDUCTION VS RAW PCM
 +---------------------------+-----------+-----------+
 
 
-STORAGE SAVED
+# STORAGE SAVED
 
+```
 Hotel California — Stereo
 29.2% |█████████████████████████████
 
@@ -156,11 +159,12 @@ Is There Someone Else? — 7.1
 
 Chemical — 8ch
 60.5% |████████████████████████████████████████████████████████
+```
 
+---
 
-======================================================================
-STEREO VS MULTICHANNEL
-======================================================================
+@ STEREO VS MULTICHANNEL
+
 
 +----------------+-------+----------------------+----------------------+
 | Content        | Tests | Average NOVA Ratio   | Average Saved        |
@@ -171,17 +175,19 @@ STEREO VS MULTICHANNEL
 
 Average ratio:
 
+```
 STEREO
 69.85% |██████████████████████████████████████████████████████████████████████
 
 MULTICHANNEL
 42.53% |██████████████████████████████████████████
+```
 
+---
 
-======================================================================
-DETAILED TEST DATA
-======================================================================
+@ DETAILED TEST DATA
 
+```
 HOTEL CALIFORNIA — EAGLES — STEREO
 
 Artist:       Eagles
@@ -337,11 +343,11 @@ NOVA is 3,942 KB smaller.
 
 Result:
 NOVA > APE > FLAC
+```
 
+---
 
-======================================================================
-CHEMICAL — PREVIOUS 32-BIT TEST
-======================================================================
+# CHEMICAL — PREVIOUS 32-BIT TEST
 
 A separate Chemical test used the original 32-bit / 48 kHz / 8-channel WAV.
 
@@ -371,11 +377,11 @@ technical test rather than a codec-vs-codec benchmark.
 The corrected 24-bit Chemical test is the result used in the main
 comparison above.
 
+---
 
-======================================================================
-HIGH COMPRESSION MODE
-======================================================================
+# HIGH COMPRESSION MODE
 
+```
 High Compression is intended primarily for archival storage.
 
 Compared with the previous NOVA compression mode:
@@ -399,11 +405,11 @@ MORE COMPRESSION
 SMALLER ARCHIVAL FILES
         ↓
 MORE CPU TIME
+```
 
 
-======================================================================
-BIT-PERFECT LOSSLESS VERIFICATION
-======================================================================
+# BIT-PERFECT LOSSLESS VERIFICATION
+
 
 NOVA is LOSSLESS.
 
@@ -422,10 +428,10 @@ The decoded audio is bit-for-bit identical to the source WAV.
 Therefore NOVA does not sacrifice audio information to achieve the
 compression shown in these tests.
 
+---
 
-======================================================================
-CURRENT FINDINGS
-======================================================================
+# CURRENT FINDINGS
+
 
 1. NOVA currently wins 3 of the 5 tested comparisons.
 
@@ -483,10 +489,10 @@ CURRENT FINDINGS
       - Highly correlated channels
       - Highly independent channels
 
+---
 
-======================================================================
-PROJECT STATUS
-======================================================================
+# PROJECT STATUS
+
 
 NOVA is currently an experimental codec and benchmark project.
 
