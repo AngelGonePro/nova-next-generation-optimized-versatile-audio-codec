@@ -20,7 +20,9 @@ NextCloud Link: https://cdntest.cosmoscraft.net/index.php/s/nfSGQJTLfgj8ArB
 Web Link: https://music.cosmoscraft.net/web.html
 <br>
 Used Audio:
+<br>
 - Bach — Goldberg Variations — Nicholas Angelich
+<br>
 - Vivaldi — The Four Seasons — London Philharmonic / Itzhak Perlman
 
 <br>
