@@ -92,48 +92,6 @@ Is There Someone Else    44.2%     ~48.1%     ~61.8%
 Chemical 8ch             39.5%     ~41.7%     ~42.4%
 ```
 
-# VISUAL:
-
-## Hotel California — Stereo
-
-```
-NOVA  70.8%
-APE  ~71.2%
-FLAC ~72.7%
-
-```
-## Unforgettable — Stereo
-
-```
-NOVA  68.9%
-APE  ~69.5%
-FLAC ~71.4%
-```
-
-## Hotel California — 7.1
-
-```
-NOVA  43.9%
-APE  ~46.6%
-FLAC ~60.6%
-```
-
-## Is There Someone Else? — 7.1
-
-```
-NOVA  44.2%
-APE  ~48.1%
-FLAC ~61.8%
-```
-
-## Chemical — 8ch
-
-```
-NOVA  39.5%
-APE  ~41.7%
-FLAC ~42.4%
-```
-
 ---
 
 # WINNER GRAPH
