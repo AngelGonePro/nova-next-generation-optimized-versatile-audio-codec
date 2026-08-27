@@ -159,7 +159,7 @@ Chemical — 8ch
 | Multichannel   | 3     | 42.53%               | 57.47%               |
 +----------------+-------+----------------------+----------------------+
 ```
-Average ratio:
+# Average ratio:
 
 ```
 STEREO
@@ -171,7 +171,7 @@ MULTICHANNEL
 
 ---
 
-@ DETAILED TEST DATA
+# DETAILED TEST DATA
 
 ```
 HOTEL CALIFORNIA — EAGLES — STEREO
