@@ -2,6 +2,12 @@
 
 Experimental lossless audio codec focused on efficient PCM compression, with particularly promising results on multichannel audio.
 
+`index.html` is the encoder.
+<br>
+`player.html` is a local player.
+<br>
+`Pterdactyl-Web-Ui` folder is a Web ui to play from NextCloud links from any supported web browser.
+
 ALL NOVA TESTS BELOW PASSED BIT-EXACT VERIFICATION.
 
 
