@@ -9,15 +9,13 @@ Experimental lossless audio codec focused on efficient PCM compression, with par
 `Pterdactyl-Web-Ui` folder is a Web ui to play from NextCloud links from any supported web browser.
 
 <br>
-If you wanna test(WARNING, NEW STREAM APP BEING WORKED ON LOGIN MAY NOT WORK):
+If you wanna test:
 <br>
 user: Guest
 <br>
 Pass: GuestAccount
 <br>
-NextCloud Link: https://cdntest.cosmoscraft.net/index.php/s/nfSGQJTLfgj8ArB
-<br>
-Web Link: https://music.cosmoscraft.net/web.html
+Web Link: https://music.cosmoscraft.net
 <br>
 Used Audio:
 <br>
